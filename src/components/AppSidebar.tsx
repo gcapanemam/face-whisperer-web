@@ -41,14 +41,14 @@ const receptionLinks = [
   { title: 'Histórico', icon: ClipboardList, path: '/reports' },
 ];
 
-  const getLinks = (role: string | null) => {
+  const links = (() => {
     switch (role) {
       case 'admin': return adminLinks;
       case 'secretary': return secretaryLinks;
       case 'teacher': return teacherLinks;
       default: return receptionLinks;
     }
-  };
+  })();
 
   const initials = profile?.full_name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '?';
 
