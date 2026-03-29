@@ -130,7 +130,6 @@ serve(async (req) => {
         });
       }
 
-      // Download photo
       console.log(`Downloading photo: ${photoUrl}`);
       const photoResp = await fetch(photoUrl);
       if (!photoResp.ok) {
@@ -138,15 +137,17 @@ serve(async (req) => {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const photoBytes = new Uint8Array(await photoResp.arrayBuffer());
-      const photoBase64 = base64Encode(photoBytes);
 
-      // Try JSON format with base64 photo (preferred by many Intelbras/Dahua models)
+      const photoBytes = new Uint8Array(await photoResp.arrayBuffer());
+      const photoBase64 = base64Encode(photoBytes).replace(/\s/g, "");
+
       const jsonBody = JSON.stringify({
-        FaceList: [{
-          UserID: personId,
-          PhotoData: [photoBase64],
-        }],
+        FaceList: [
+          {
+            UserID: personId,
+            PhotoData: [photoBase64],
+          },
+        ],
       });
 
       const insertUrl = `${deviceUrl}/cgi-bin/AccessFace.cgi?action=insertMulti`;
@@ -155,7 +156,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       });
       const insertText = await insertResp.text();
-      console.log(`insertMulti response (${insertResp.status}): ${insertText.slice(0, 500)}`);
+      console.log(`insertMulti JSON response (${insertResp.status}): ${insertText.slice(0, 500)}`);
 
       if (insertResp.ok && !insertText.toLowerCase().includes("error")) {
         return new Response(JSON.stringify({ success: true, message: "Foto enviada ao dispositivo!" }), {
@@ -163,12 +164,32 @@ serve(async (req) => {
         });
       }
 
-      // If exists, try updateMulti
-      if (insertText.includes("Exist") || insertText.includes("exist") || insertText.includes("Already")) {
+      const formBody = new URLSearchParams();
+      formBody.set("FaceList[0].UserID", personId);
+      formBody.set("FaceList[0].PhotoData[0]", photoBase64);
+
+      console.log(`insertMulti (form body): ${insertUrl}, body length: ${formBody.toString().length}`);
+      const formResp = await auth.request(insertUrl, "POST", formBody.toString(), {
+        "Content-Type": "application/x-www-form-urlencoded",
+      });
+      const formText = await formResp.text();
+      console.log(`insertMulti form response (${formResp.status}): ${formText.slice(0, 500)}`);
+
+      if (formResp.ok && !formText.toLowerCase().includes("error")) {
+        return new Response(JSON.stringify({ success: true, message: "Foto enviada ao dispositivo!" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const alreadyExists = [insertText, formText].some((text) =>
+        text.includes("Exist") || text.includes("exist") || text.includes("Already")
+      );
+
+      if (alreadyExists) {
         const updateUrl = `${deviceUrl}/cgi-bin/AccessFace.cgi?action=updateMulti`;
-        console.log(`updateMulti (JSON): ${updateUrl}`);
-        const updateResp = await auth.request(updateUrl, "POST", jsonBody, {
-          "Content-Type": "application/json",
+        console.log(`updateMulti (form body): ${updateUrl}`);
+        const updateResp = await auth.request(updateUrl, "POST", formBody.toString(), {
+          "Content-Type": "application/x-www-form-urlencoded",
         });
         const updateText = await updateResp.text();
         console.log(`updateMulti response (${updateResp.status}): ${updateText.slice(0, 500)}`);
@@ -178,25 +199,17 @@ serve(async (req) => {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
+
         return new Response(JSON.stringify({ error: "Erro ao atualizar foto", raw: updateText.slice(0, 300) }), {
           status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      // Fallback: try query-string style insert
-      const qsUrl = `${deviceUrl}/cgi-bin/AccessFace.cgi?action=insertMulti&FaceList[0].UserID=${encodeURIComponent(personId)}&FaceList[0].PhotoData[0]=${encodeURIComponent(photoBase64)}`;
-      console.log(`insertMulti (query-string fallback), url length: ${qsUrl.length}`);
-      const qsResp = await auth.request(qsUrl, "POST");
-      const qsText = await qsResp.text();
-      console.log(`insertMulti QS response (${qsResp.status}): ${qsText.slice(0, 500)}`);
-
-      if (qsResp.ok && !qsText.toLowerCase().includes("error")) {
-        return new Response(JSON.stringify({ success: true, message: "Foto enviada ao dispositivo!" }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      return new Response(JSON.stringify({ error: "Erro ao enviar foto", raw: insertText.slice(0, 300), qsRaw: qsText.slice(0, 300) }), {
+      return new Response(JSON.stringify({
+        error: "Erro ao enviar foto",
+        raw: formText.slice(0, 300) || insertText.slice(0, 300),
+        jsonRaw: insertText.slice(0, 300),
+      }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
 
