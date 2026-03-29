@@ -27,7 +27,7 @@ export function TeacherDashboard() {
         setChildren(kids || []);
         const { data: pickups } = await supabase
           .from('pickup_events')
-          .select('*, guardians(full_name, photo_url), children(full_name)')
+          .select('*, guardians(full_name, photo_url), children(full_name, photo_url)')
           .eq('classroom_id', data.id)
           .eq('status', 'pending')
           .order('created_at', { ascending: false });
