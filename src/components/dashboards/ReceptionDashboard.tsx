@@ -34,15 +34,21 @@ export function ReceptionDashboard() {
     setUnknownCount(count || 0);
   };
 
+  const fetchDevices = async () => {
+    const { data } = await supabase.from('devices').select('id, name, enabled').eq('enabled', true).order('name');
+    setDevices(data || []);
+  };
+
   const pollDevice = useCallback(async () => {
     setIsPolling(true);
     setDeviceStatus('polling');
     try {
-      const { data, error } = await supabase.functions.invoke('intelbras-poll', { method: 'POST' });
+      const body: any = {};
+      if (selectedDeviceId !== 'all') body.deviceId = selectedDeviceId;
+      const { data, error } = await supabase.functions.invoke('intelbras-poll', { body });
       if (error) throw error;
       setDeviceStatus(data?.deviceStatus === 'online' ? 'online' : 'offline');
       setLastPoll(new Date().toLocaleTimeString('pt-BR'));
-      // Refresh data after poll
       await Promise.all([fetchEvents(), fetchUnknown()]);
     } catch (err) {
       console.error('Poll error:', err);
@@ -50,7 +56,7 @@ export function ReceptionDashboard() {
     } finally {
       setIsPolling(false);
     }
-  }, []);
+  }, [selectedDeviceId]);
 
   useEffect(() => {
     fetchEvents();
