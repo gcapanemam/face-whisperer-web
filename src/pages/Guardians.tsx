@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Plus, Trash2, Search, Link, ScanFace, Loader2, RefreshCw, Pencil } from 'lucide-react';
+import { Plus, Trash2, Search, Link, ScanFace, Loader2, RefreshCw, Pencil, Upload, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PhotoUpload } from '@/components/PhotoUpload';
 
@@ -39,6 +39,7 @@ export default function Guardians() {
   const [intelbrasPersons, setIntelbrasPersons] = useState<IntelbrasPerson[]>([]);
   const [loadingPersons, setLoadingPersons] = useState(false);
   const [personsOpen, setPersonsOpen] = useState(false);
+  const [syncingFace, setSyncingFace] = useState(false);
 
   const { toast } = useToast();
 
@@ -92,6 +93,57 @@ export default function Guardians() {
     if (person.name && !name) setName(person.name);
     setPersonsOpen(false);
     toast({ title: `Pessoa "${person.userId}" selecionada` });
+  };
+
+  const handleSendFaceToDevice = async () => {
+    if (!intelbrasPersonId) {
+      toast({ title: 'Informe o ID da pessoa no dispositivo', variant: 'destructive' });
+      return;
+    }
+    if (!photoUrl) {
+      toast({ title: 'Adicione uma foto antes de enviar ao dispositivo', variant: 'destructive' });
+      return;
+    }
+    setSyncingFace(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('intelbras-face', {
+        body: { action: 'set', personId: intelbrasPersonId, photoUrl },
+      });
+      if (error) throw error;
+      if (data?.success) {
+        toast({ title: 'Foto enviada ao dispositivo!' });
+      } else {
+        toast({ title: 'Erro ao enviar', description: data?.error || 'Erro desconhecido', variant: 'destructive' });
+      }
+    } catch (err: any) {
+      toast({ title: 'Erro ao enviar foto', description: err.message, variant: 'destructive' });
+    } finally {
+      setSyncingFace(false);
+    }
+  };
+
+  const handleGetFaceFromDevice = async () => {
+    if (!intelbrasPersonId) {
+      toast({ title: 'Informe o ID da pessoa no dispositivo', variant: 'destructive' });
+      return;
+    }
+    setSyncingFace(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('intelbras-face', {
+        body: { action: 'get', personId: intelbrasPersonId },
+      });
+      if (error) throw error;
+      if (data?.success && data?.photo) {
+        setPhotoUrl(data.photo);
+        toast({ title: 'Foto recebida do dispositivo!' });
+      } else {
+        toast({ title: 'Foto não encontrada no dispositivo', description: data?.error, variant: 'destructive' });
+      }
+    } catch (err: any) {
+      toast({ title: 'Erro ao buscar foto', description: err.message, variant: 'destructive' });
+    } finally {
+      setSyncingFace(false);
+    }
   };
 
   const handleSave = async () => {
@@ -192,9 +244,21 @@ export default function Guardians() {
                   </Button>
                 </div>
                 {intelbrasPersonId && (
-                  <Badge variant="secondary" className="mt-1">
-                    <ScanFace className="h-3 w-3 mr-1" /> Vinculado: {intelbrasPersonId}
-                  </Badge>
+                  <div className="space-y-2 mt-1">
+                    <Badge variant="secondary">
+                      <ScanFace className="h-3 w-3 mr-1" /> Vinculado: {intelbrasPersonId}
+                    </Badge>
+                    <div className="flex gap-2">
+                      <Button type="button" variant="outline" size="sm" onClick={handleSendFaceToDevice} disabled={syncingFace || !photoUrl}>
+                        {syncingFace ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Upload className="h-3 w-3 mr-1" />}
+                        Enviar foto ao dispositivo
+                      </Button>
+                      <Button type="button" variant="outline" size="sm" onClick={handleGetFaceFromDevice} disabled={syncingFace}>
+                        {syncingFace ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Download className="h-3 w-3 mr-1" />}
+                        Buscar foto do dispositivo
+                      </Button>
+                    </div>
+                  </div>
                 )}
               </div>
               <div className="space-y-2">
