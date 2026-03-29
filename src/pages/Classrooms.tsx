@@ -19,7 +19,17 @@ export default function Classrooms() {
   const { toast } = useToast();
 
   const fetchData = async () => {
-    const { data } = await supabase.from('classrooms').select('*, profiles:teacher_user_id(full_name)').order('name');
+    const { data } = await supabase.from('classrooms').select('*').order('name');
+    // Fetch teacher names separately
+    const teacherIds = (data || []).map(c => c.teacher_user_id).filter(Boolean);
+    if (teacherIds.length > 0) {
+      const { data: profs } = await supabase.from('profiles').select('user_id, full_name').in('user_id', teacherIds);
+      if (profs && data) {
+        data.forEach(c => {
+          (c as any).teacher_name = profs.find(p => p.user_id === c.teacher_user_id)?.full_name || null;
+        });
+      }
+    }
     setClassrooms(data || []);
     const { data: roles } = await supabase.from('user_roles').select('user_id').eq('role', 'teacher');
     if (roles) {
@@ -105,7 +115,7 @@ export default function Classrooms() {
             <CardContent>
               <p className="text-sm text-muted-foreground">{room.grade || 'Sem série'}</p>
               <p className="text-sm text-muted-foreground">
-                Professora: {room.profiles?.full_name || 'Não atribuída'}
+                Professora: {room.teacher_name || 'Não atribuída'}
               </p>
             </CardContent>
           </Card>
