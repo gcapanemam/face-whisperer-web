@@ -8,6 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, School, Trash2, Pencil } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { ImportExcel } from '@/components/ImportExcel';
+import { supabase as sb } from '@/integrations/supabase/client';
 
 export default function Classrooms() {
   const [classrooms, setClassrooms] = useState<any[]>([]);
