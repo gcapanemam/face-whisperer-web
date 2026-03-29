@@ -98,7 +98,7 @@ export default function Guardians() {
     }
 
     toast({ title: 'Responsável cadastrado!' });
-    setName(''); setPhone(''); setCpf(''); setEmail(''); setIntelbrasPersonId(''); setSelectedChildren([]);
+    setName(''); setPhone(''); setCpf(''); setEmail(''); setIntelbrasPersonId(''); setPhotoUrl(''); setSelectedChildren([]);
     setOpen(false);
     fetchData();
   };
