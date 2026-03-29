@@ -81,12 +81,15 @@ serve(async (req) => {
       const probeEndpoints = [
         `${deviceUrl}/cgi-bin/FaceInfoManager.cgi?action=get&UserID=1`,
         `${deviceUrl}/cgi-bin/AccessFace.cgi?action=list&UserID=1`,
-        `${deviceUrl}/cgi-bin/recordFinder.cgi?action=find&name=AccessControlFaceInfo&count=1`,
-        `${deviceUrl}/cgi-bin/recordFinder.cgi?action=find&name=FaceInfo&count=1`,
-        `${deviceUrl}/cgi-bin/recordFinder.cgi?action=find&name=AccessControlFace&count=1`,
-        `${deviceUrl}/cgi-bin/recordFinder.cgi?action=getCollect&name=AccessControlCard`,
-        `${deviceUrl}/cgi-bin/configManager.cgi?action=getConfig&name=FaceRecognitionServer`,
-        `${deviceUrl}/cgi-bin/snap.cgi?channel=0`,
+        `${deviceUrl}/cgi-bin/AccessFace.cgi?action=list`,
+        `${deviceUrl}/cgi-bin/AccessFace.cgi?action=getCount`,
+        `${deviceUrl}/cgi-bin/AccessFace.cgi?action=get&UserID=1`,
+        `${deviceUrl}/cgi-bin/AccessUser.cgi?action=list&UserID=1`,
+        `${deviceUrl}/cgi-bin/ISAPI/AccessControl/UserInfo/Search`,
+        `${deviceUrl}/cgi-bin/recordFinder.cgi?action=factory.getCollect`,
+        `${deviceUrl}/cgi-bin/magicBox.cgi?action=getProductDefinition`,
+        `${deviceUrl}/cgi-bin/magicBox.cgi?action=getDeviceType`,
+        `${deviceUrl}/cgi-bin/magicBox.cgi?action=getSoftwareVersion`,
       ];
       const results: any[] = [];
       for (const url of probeEndpoints) {
