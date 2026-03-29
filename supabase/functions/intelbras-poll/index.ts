@@ -45,14 +45,14 @@ class DigestAuth {
 
     const uri = new URL(url).pathname + new URL(url).search;
 
-    const ha1 = await this.md5(`${this.username}:${realm}:${this.password}`);
-    const ha2 = await this.md5(`${method}:${uri}`);
+    const ha1 = this.md5(`${this.username}:${realm}:${this.password}`);
+    const ha2 = this.md5(`${method}:${uri}`);
 
     let response: string;
     if (qop) {
-      response = await this.md5(`${ha1}:${nonce}:${ncStr}:${cnonce}:${qop.split(",")[0]}:${ha2}`);
+      response = this.md5(`${ha1}:${nonce}:${ncStr}:${cnonce}:${qop.split(",")[0]}:${ha2}`);
     } else {
-      response = await this.md5(`${ha1}:${nonce}:${ha2}`);
+      response = this.md5(`${ha1}:${nonce}:${ha2}`);
     }
 
     const authHeader = `Digest username="${this.username}", realm="${realm}", nonce="${nonce}", uri="${uri}", response="${response}"${
