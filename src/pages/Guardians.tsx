@@ -28,6 +28,7 @@ export default function Guardians() {
   const [cpf, setCpf] = useState('');
   const [email, setEmail] = useState('');
   const [intelbrasPersonId, setIntelbrasPersonId] = useState('');
+  const [photoUrl, setPhotoUrl] = useState('');
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
