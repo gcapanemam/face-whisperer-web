@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Bell, Check, X, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 
 export function TeacherDashboard() {
   const { user } = useAuth();
@@ -26,7 +27,7 @@ export function TeacherDashboard() {
         setChildren(kids || []);
         const { data: pickups } = await supabase
           .from('pickup_events')
-          .select('*, guardians(full_name, photo_url), children(full_name)')
+          .select('*, guardians(full_name, photo_url), children(full_name, photo_url)')
           .eq('classroom_id', data.id)
           .eq('status', 'pending')
           .order('created_at', { ascending: false });
@@ -53,7 +54,7 @@ export function TeacherDashboard() {
         // Fetch full data
         supabase
           .from('pickup_events')
-          .select('*, guardians(full_name, photo_url), children(full_name)')
+          .select('*, guardians(full_name, photo_url), children(full_name, photo_url)')
           .eq('id', newEvent.id)
           .single()
           .then(({ data }) => {
@@ -113,9 +114,12 @@ export function TeacherDashboard() {
             <Card key={pickup.id} className="border-destructive/30 bg-destructive/5">
               <CardContent className="flex items-center justify-between p-4">
                 <div className="flex items-center gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-                    <Users className="h-6 w-6 text-primary" />
-                  </div>
+                  <Avatar className="h-12 w-12">
+                    {pickup.children?.photo_url ? (
+                      <AvatarImage src={pickup.children.photo_url} alt={pickup.children?.full_name} />
+                    ) : null}
+                    <AvatarFallback>{pickup.children?.full_name?.[0] || '?'}</AvatarFallback>
+                  </Avatar>
                   <div>
                     <p className="font-semibold">{pickup.guardians?.full_name}</p>
                     <p className="text-sm text-muted-foreground">
@@ -151,9 +155,12 @@ export function TeacherDashboard() {
             <div className="grid gap-3 sm:grid-cols-2">
               {children.map((child) => (
                 <div key={child.id} className="flex items-center gap-3 rounded-lg border p-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary">
-                    <span className="text-sm font-medium">{child.full_name[0]}</span>
-                  </div>
+                  <Avatar className="h-10 w-10">
+                    {child.photo_url ? (
+                      <AvatarImage src={child.photo_url} alt={child.full_name} />
+                    ) : null}
+                    <AvatarFallback>{child.full_name[0]}</AvatarFallback>
+                  </Avatar>
                   <div>
                     <p className="font-medium text-sm">{child.full_name}</p>
                   </div>
