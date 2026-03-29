@@ -155,9 +155,12 @@ export function TeacherDashboard() {
             <div className="grid gap-3 sm:grid-cols-2">
               {children.map((child) => (
                 <div key={child.id} className="flex items-center gap-3 rounded-lg border p-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary">
-                    <span className="text-sm font-medium">{child.full_name[0]}</span>
-                  </div>
+                  <Avatar className="h-10 w-10">
+                    {child.photo_url ? (
+                      <AvatarImage src={child.photo_url} alt={child.full_name} />
+                    ) : null}
+                    <AvatarFallback>{child.full_name[0]}</AvatarFallback>
+                  </Avatar>
                   <div>
                     <p className="font-medium text-sm">{child.full_name}</p>
                   </div>
