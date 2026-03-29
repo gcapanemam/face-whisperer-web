@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { Md5 } from "https://deno.land/std@0.160.0/hash/md5.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -18,12 +19,8 @@ class DigestAuth {
     this.password = password;
   }
 
-  private async md5(str: string): Promise<string> {
-    const data = new TextEncoder().encode(str);
-    const hash = await crypto.subtle.digest("MD5", data);
-    return Array.from(new Uint8Array(hash))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
+  private md5(str: string): string {
+    return new Md5().update(str).toString();
   }
 
   async authenticate(url: string, method: string = "GET"): Promise<Response> {
@@ -48,14 +45,14 @@ class DigestAuth {
 
     const uri = new URL(url).pathname + new URL(url).search;
 
-    const ha1 = await this.md5(`${this.username}:${realm}:${this.password}`);
-    const ha2 = await this.md5(`${method}:${uri}`);
+    const ha1 = this.md5(`${this.username}:${realm}:${this.password}`);
+    const ha2 = this.md5(`${method}:${uri}`);
 
     let response: string;
     if (qop) {
-      response = await this.md5(`${ha1}:${nonce}:${ncStr}:${cnonce}:${qop.split(",")[0]}:${ha2}`);
+      response = this.md5(`${ha1}:${nonce}:${ncStr}:${cnonce}:${qop.split(",")[0]}:${ha2}`);
     } else {
-      response = await this.md5(`${ha1}:${nonce}:${ha2}`);
+      response = this.md5(`${ha1}:${nonce}:${ha2}`);
     }
 
     const authHeader = `Digest username="${this.username}", realm="${realm}", nonce="${nonce}", uri="${uri}", response="${response}"${
@@ -91,6 +88,9 @@ serve(async (req) => {
       );
     }
 
+    // Clean device URL - remove hash fragments and trailing slashes
+    const cleanUrl = deviceUrl.replace(/#.*$/, '').replace(/\/+$/, '');
+    
     const supabase = createClient(supabaseUrl, supabaseKey);
     const auth = new DigestAuth(username, password);
 
@@ -102,42 +102,57 @@ serve(async (req) => {
       .limit(1)
       .single();
 
-    // Calculate time range for polling
     const now = Math.floor(Date.now() / 1000);
     const startTime = lastEvent
       ? Math.floor(new Date(lastEvent.created_at).getTime() / 1000)
-      : now - 300; // Last 5 minutes if no previous events
+      : now - 300;
 
-    // Query access control records from the Intelbras device
-    // Using Dahua/Intelbras recordFinder API
-    const findUrl = `${deviceUrl}/cgi-bin/recordFinder.cgi?action=find&name=AccessControlCardRec&count=100`;
-
-    console.log(`Polling Intelbras device: ${deviceUrl}`);
+    console.log(`Polling Intelbras device: ${cleanUrl}`);
     console.log(`Time range: ${new Date(startTime * 1000).toISOString()} to ${new Date(now * 1000).toISOString()}`);
 
     let events: any[] = [];
     let deviceStatus = "online";
+    let debugInfo: any = {};
+
+    // Try multiple Dahua/Intelbras API endpoints
+    const endpoints = [
+      `/cgi-bin/recordFinder.cgi?action=find&name=AccessControlCardRec&count=100`,
+      `/cgi-bin/accessControl.cgi?action=list&channel=1`,
+      `/cgi-bin/AccessControl.cgi?action=list&channel=1`,
+    ];
 
     try {
-      const response = await auth.authenticate(findUrl);
-      const text = await response.text();
-
-      console.log(`Device response status: ${response.status}`);
-      console.log(`Device response (first 500 chars): ${text.slice(0, 500)}`);
-
-      if (response.ok) {
-        // Parse the Dahua key=value response format
-        events = parseDahuaResponse(text);
-      } else {
-        // Try alternative endpoint - eventManager for real-time events
-        const altUrl = `${deviceUrl}/cgi-bin/accessControl.cgi?action=list&channel=1`;
-        const altResponse = await auth.authenticate(altUrl);
-        const altText = await altResponse.text();
-        console.log(`Alt endpoint response: ${altResponse.status}`);
-        console.log(`Alt response (first 500 chars): ${altText.slice(0, 500)}`);
+      for (const endpoint of endpoints) {
+        const url = `${cleanUrl}${endpoint}`;
+        console.log(`Trying endpoint: ${url}`);
         
-        if (altResponse.ok) {
-          events = parseDahuaResponse(altText);
+        try {
+          const response = await auth.authenticate(url);
+          const text = await response.text();
+
+          console.log(`Response status: ${response.status}`);
+          console.log(`Response (first 500 chars): ${text.slice(0, 500)}`);
+
+          // Skip if we got HTML (web UI) instead of API data
+          if (text.includes("<!DOCTYPE") || text.includes("<html")) {
+            console.log("Got HTML response, skipping...");
+            debugInfo[endpoint] = { status: response.status, type: "html" };
+            continue;
+          }
+
+          debugInfo[endpoint] = { status: response.status, type: "api", preview: text.slice(0, 200) };
+
+          if (response.ok) {
+            const parsed = parseDahuaResponse(text);
+            if (parsed.length > 0) {
+              events = parsed;
+              console.log(`Found ${events.length} events from ${endpoint}`);
+              break;
+            }
+          }
+        } catch (endpointError) {
+          console.log(`Endpoint ${endpoint} error: ${endpointError.message}`);
+          debugInfo[endpoint] = { error: endpointError.message };
         }
       }
     } catch (fetchError) {
@@ -228,6 +243,7 @@ serve(async (req) => {
       eventsFound: events.length,
       eventsProcessed: processedCount,
       pickupEventsCreated,
+      debugInfo,
       timestamp: new Date().toISOString(),
     };
 

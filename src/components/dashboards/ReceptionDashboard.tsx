@@ -1,37 +1,64 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { MonitorSmartphone, AlertTriangle, CheckCircle } from 'lucide-react';
+import { MonitorSmartphone, AlertTriangle, CheckCircle, RefreshCw, Wifi, WifiOff } from 'lucide-react';
 
 export function ReceptionDashboard() {
   const [events, setEvents] = useState<any[]>([]);
   const [unknownCount, setUnknownCount] = useState(0);
+  const [deviceStatus, setDeviceStatus] = useState<'online' | 'offline' | 'polling' | 'unknown'>('unknown');
+  const [lastPoll, setLastPoll] = useState<string | null>(null);
+  const [isPolling, setIsPolling] = useState(false);
+
+  const fetchEvents = async () => {
+    const { data } = await supabase
+      .from('pickup_events')
+      .select('*, guardians(full_name), children(full_name), classrooms(name)')
+      .gte('created_at', new Date().toISOString().split('T')[0])
+      .order('created_at', { ascending: false })
+      .limit(50);
+    setEvents(data || []);
+  };
+
+  const fetchUnknown = async () => {
+    const { count } = await supabase
+      .from('recognition_log')
+      .select('id', { count: 'exact', head: true })
+      .eq('recognized', false)
+      .gte('created_at', new Date().toISOString().split('T')[0]);
+    setUnknownCount(count || 0);
+  };
+
+  const pollDevice = useCallback(async () => {
+    setIsPolling(true);
+    setDeviceStatus('polling');
+    try {
+      const { data, error } = await supabase.functions.invoke('intelbras-poll', { method: 'POST' });
+      if (error) throw error;
+      setDeviceStatus(data?.deviceStatus === 'online' ? 'online' : 'offline');
+      setLastPoll(new Date().toLocaleTimeString('pt-BR'));
+      // Refresh data after poll
+      await Promise.all([fetchEvents(), fetchUnknown()]);
+    } catch (err) {
+      console.error('Poll error:', err);
+      setDeviceStatus('offline');
+    } finally {
+      setIsPolling(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const fetchEvents = async () => {
-      const { data } = await supabase
-        .from('pickup_events')
-        .select('*, guardians(full_name), children(full_name), classrooms(name)')
-        .gte('created_at', new Date().toISOString().split('T')[0])
-        .order('created_at', { ascending: false })
-        .limit(50);
-      setEvents(data || []);
-    };
-
-    const fetchUnknown = async () => {
-      const { count } = await supabase
-        .from('recognition_log')
-        .select('id', { count: 'exact', head: true })
-        .eq('recognized', false)
-        .gte('created_at', new Date().toISOString().split('T')[0]);
-      setUnknownCount(count || 0);
-    };
-
     fetchEvents();
     fetchUnknown();
+    // Initial poll
+    pollDevice();
 
-    // Realtime
+    // Auto-poll every 10 seconds
+    const interval = setInterval(pollDevice, 10000);
+
+    // Realtime subscriptions
     const channel = supabase
       .channel('reception-events')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'pickup_events' }, () => {
@@ -42,8 +69,11 @@ export function ReceptionDashboard() {
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
-  }, []);
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
+  }, [pollDevice]);
 
   const statusConfig: Record<string, { label: string; class: string }> = {
     pending: { label: 'Pendente', class: 'bg-warning/20 text-warning' },
@@ -52,14 +82,41 @@ export function ReceptionDashboard() {
     expired: { label: 'Expirado', class: 'bg-muted text-muted-foreground' },
   };
 
+  const deviceStatusConfig = {
+    online: { label: 'Online', icon: Wifi, class: 'text-accent' },
+    offline: { label: 'Offline', icon: WifiOff, class: 'text-destructive' },
+    polling: { label: 'Consultando...', icon: RefreshCw, class: 'text-primary animate-spin' },
+    unknown: { label: 'Verificando...', icon: RefreshCw, class: 'text-muted-foreground animate-spin' },
+  };
+
+  const DeviceIcon = deviceStatusConfig[deviceStatus].icon;
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-display text-2xl font-bold">Monitoramento</h1>
-        <p className="text-muted-foreground">Feed ao vivo de reconhecimentos faciais</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-display text-2xl font-bold">Monitoramento</h1>
+          <p className="text-muted-foreground">Feed ao vivo de reconhecimentos faciais</p>
+        </div>
+        <Button variant="outline" onClick={pollDevice} disabled={isPolling}>
+          <RefreshCw className={`h-4 w-4 mr-1 ${isPolling ? 'animate-spin' : ''}`} />
+          Atualizar
+        </Button>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Dispositivo Intelbras</CardTitle>
+            <DeviceIcon className={`h-5 w-5 ${deviceStatusConfig[deviceStatus].class}`} />
+          </CardHeader>
+          <CardContent>
+            <p className={`text-lg font-bold font-display ${deviceStatusConfig[deviceStatus].class}`}>
+              {deviceStatusConfig[deviceStatus].label}
+            </p>
+            {lastPoll && <p className="text-xs text-muted-foreground mt-1">Última consulta: {lastPoll}</p>}
+          </CardContent>
+        </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Eventos Hoje</CardTitle>
