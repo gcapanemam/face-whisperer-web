@@ -116,19 +116,17 @@ export function ReceptionDashboard() {
           <p className="text-muted-foreground">Feed ao vivo de reconhecimentos faciais</p>
         </div>
         <div className="flex items-center gap-2">
-          {devices.length > 1 && (
-            <Select value={selectedDeviceId} onValueChange={setSelectedDeviceId}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Dispositivo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                {devices.map(d => (
-                  <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
+          <Select value={selectedDeviceId} onValueChange={setSelectedDeviceId}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Dispositivo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os dispositivos</SelectItem>
+              {devices.map(d => (
+                <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button variant="outline" onClick={pollDevice} disabled={isPolling}>
             <RefreshCw className={`h-4 w-4 mr-1 ${isPolling ? 'animate-spin' : ''}`} />
             Atualizar

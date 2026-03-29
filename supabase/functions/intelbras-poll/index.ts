@@ -229,6 +229,7 @@ async function pollDevice(device: DeviceConfig, supabase: any, testOnly: boolean
               classroom_id: child.classroom_id,
               intelbras_event_id: eventId,
               status: "pending",
+              device_id: device.id === "env" ? null : device.id,
             });
             pickupEventsCreated++;
           }
