@@ -181,38 +181,43 @@ export function ReceptionDashboard() {
           ) : (
             <div className="space-y-4">
               {events.map((ev) => (
-                <div key={ev.id} className="flex items-center gap-4 rounded-xl border p-4">
+                <div key={ev.id} className="flex items-center gap-5 rounded-xl border p-5">
                   {/* Guardian photo */}
-                  <Avatar className="h-16 w-16 shrink-0 border-2 border-primary/20">
-                    {ev.guardians?.photo_url ? (
-                      <AvatarImage src={ev.guardians.photo_url} alt={ev.guardians.full_name} className="object-cover" />
-                    ) : null}
-                    <AvatarFallback className="bg-primary/10 text-primary text-lg">
-                      <User className="h-7 w-7" />
-                    </AvatarFallback>
-                  </Avatar>
+                  <div className="flex flex-col items-center gap-1 shrink-0">
+                    <Avatar className="h-16 w-16 border-2 border-primary/20">
+                      {ev.guardians?.photo_url ? (
+                        <AvatarImage src={ev.guardians.photo_url} alt={ev.guardians.full_name} className="object-cover" />
+                      ) : null}
+                      <AvatarFallback className="bg-primary/10 text-primary text-lg">
+                        <User className="h-7 w-7" />
+                      </AvatarFallback>
+                    </Avatar>
+                    <p className="text-xs font-medium text-center truncate max-w-[72px]">{ev.guardians?.full_name || 'Desconhecido'}</p>
+                  </div>
 
-                  {/* Info */}
+                  {/* Arrow / separator */}
+                  <div className="text-muted-foreground text-lg">→</div>
+
+                  {/* Child photo */}
+                  <div className="flex flex-col items-center gap-1 shrink-0">
+                    <Avatar className="h-16 w-16 border-2 border-accent/20">
+                      {ev.children?.photo_url ? (
+                        <AvatarImage src={ev.children.photo_url} alt={ev.children.full_name} className="object-cover" />
+                      ) : null}
+                      <AvatarFallback className="bg-accent/10 text-accent text-lg">
+                        {ev.children?.full_name?.charAt(0) || '?'}
+                      </AvatarFallback>
+                    </Avatar>
+                    <p className="text-xs font-medium text-center truncate max-w-[72px]">{ev.children?.full_name}</p>
+                  </div>
+
+                  {/* Details */}
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-base truncate">{ev.guardians?.full_name || 'Desconhecido'}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Avatar className="h-14 w-14 border-2 border-accent/20">
-                        {ev.children?.photo_url ? (
-                          <AvatarImage src={ev.children.photo_url} alt={ev.children.full_name} className="object-cover" />
-                        ) : null}
-                        <AvatarFallback className="bg-accent/10 text-accent text-lg">
-                          {ev.children?.full_name?.charAt(0) || '?'}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="text-sm font-medium">{ev.children?.full_name}</p>
-                        <p className="text-xs text-muted-foreground">{ev.classrooms?.name}</p>
-                      </div>
-                    </div>
+                    <p className="text-sm text-muted-foreground">{ev.classrooms?.name}</p>
                   </div>
 
                   {/* Time + status */}
-                  <div className="flex flex-col items-end gap-1 shrink-0">
+                  <div className="flex flex-col items-end gap-1.5 shrink-0">
                     <div className="text-sm text-muted-foreground font-mono">
                       {new Date(ev.recognized_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                     </div>
