@@ -15,6 +15,7 @@ import Reports from "./pages/Reports";
 import Monitoring from "./pages/Monitoring";
 import Notifications from "./pages/Notifications";
 import Devices from "./pages/Devices";
+import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -41,7 +42,7 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/" element={<PublicRoute><Index /></PublicRoute>} />
             <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/classrooms" element={<ProtectedRoute><Classrooms /></ProtectedRoute>} />
