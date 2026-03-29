@@ -16,12 +16,16 @@ export function ReceptionDashboard() {
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('all');
 
   const fetchEvents = async () => {
-    const { data } = await supabase
+    let query = supabase
       .from('pickup_events')
       .select('*, guardians(full_name), children(full_name), classrooms(name)')
       .gte('created_at', new Date().toISOString().split('T')[0])
       .order('created_at', { ascending: false })
       .limit(50);
+    if (selectedDeviceId !== 'all') {
+      query = query.eq('device_id', selectedDeviceId);
+    }
+    const { data } = await query;
     setEvents(data || []);
   };
 
