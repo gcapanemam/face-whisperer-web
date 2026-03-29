@@ -138,6 +138,16 @@ export default function Guardians() {
           <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
             <DialogHeader><DialogTitle>Cadastrar Responsável</DialogTitle></DialogHeader>
             <div className="space-y-4">
+              {/* Photo Upload */}
+              <div className="space-y-2">
+                <Label>Foto</Label>
+                <PhotoUpload
+                  folder="guardians"
+                  onUploaded={setPhotoUrl}
+                  name={name}
+                  currentUrl={photoUrl || null}
+                />
+              </div>
               {/* Intelbras Person ID */}
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
