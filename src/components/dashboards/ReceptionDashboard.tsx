@@ -19,7 +19,7 @@ export function ReceptionDashboard() {
   const fetchEvents = async () => {
     let query = supabase
       .from('pickup_events')
-      .select('*, guardians(full_name), children(full_name), classrooms(name)')
+      .select('*, guardians(full_name, photo_url), children(full_name, photo_url), classrooms(name)')
       .gte('created_at', new Date().toISOString().split('T')[0])
       .order('created_at', { ascending: false })
       .limit(50);
