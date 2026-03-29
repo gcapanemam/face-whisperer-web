@@ -95,6 +95,23 @@ export default function Classrooms() {
           <h1 className="font-display text-2xl font-bold">Salas</h1>
           <p className="text-muted-foreground">Gerenciar salas e turmas</p>
         </div>
+        <ImportExcel
+          buttonLabel="Importar Salas"
+          fields={[
+            { dbField: 'name', label: 'Nome', required: true },
+            { dbField: 'grade', label: 'Série/Turma' },
+          ]}
+          onImport={async (rows) => {
+            let success = 0, errors = 0;
+            for (const row of rows) {
+              if (!row.name) { errors++; continue; }
+              const { error } = await supabase.from('classrooms').insert({ name: row.name, grade: row.grade || null });
+              if (error) errors++; else success++;
+            }
+            fetchData();
+            return { success, errors };
+          }}
+        />
         <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetForm(); }}>
           <DialogTrigger asChild>
             <Button><Plus className="h-4 w-4 mr-1" /> Nova Sala</Button>

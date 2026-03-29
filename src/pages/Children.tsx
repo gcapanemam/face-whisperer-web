@@ -147,6 +147,7 @@ export default function Children() {
             </div>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       <div className="relative">

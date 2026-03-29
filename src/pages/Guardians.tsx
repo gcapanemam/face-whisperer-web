@@ -285,6 +285,31 @@ export default function Guardians() {
           <h1 className="font-display text-2xl font-bold">Responsáveis</h1>
           <p className="text-muted-foreground">{guardians.length} cadastrados</p>
         </div>
+        <div className="flex gap-2">
+        <ImportExcel
+          buttonLabel="Importar Responsáveis"
+          fields={[
+            { dbField: 'full_name', label: 'Nome', required: true },
+            { dbField: 'phone', label: 'Telefone' },
+            { dbField: 'cpf', label: 'CPF' },
+            { dbField: 'email', label: 'Email' },
+          ]}
+          onImport={async (rows) => {
+            let success = 0, errors = 0;
+            for (const row of rows) {
+              if (!row.full_name) { errors++; continue; }
+              const { error } = await supabase.from('guardians').insert({
+                full_name: row.full_name,
+                phone: row.phone || null,
+                cpf: row.cpf || null,
+                email: row.email || null,
+              });
+              if (error) errors++; else success++;
+            }
+            fetchData();
+            return { success, errors };
+          }}
+        />
         <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetForm(); }}>
           <DialogTrigger asChild>
             <Button><Plus className="h-4 w-4 mr-1" /> Novo Responsável</Button>
