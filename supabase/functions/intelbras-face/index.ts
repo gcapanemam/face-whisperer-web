@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { Md5 } from "https://deno.land/std@0.160.0/hash/md5.ts";
+import { encode as base64Encode } from "https://deno.land/std@0.160.0/encoding/base64.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -21,7 +22,8 @@ class DigestAuth {
     return new Md5().update(str).toString();
   }
 
-  async request(url: string, method: string = "GET", body?: BodyInit, extraHeaders?: Record<string, string>): Promise<Response> {
+  async request(url: string, method: string = "GET", body?: string, extraHeaders?: Record<string, string>): Promise<Response> {
+    // First request to get digest challenge
     const firstResponse = await fetch(url, { method, redirect: "manual" });
     if (firstResponse.status !== 401) return firstResponse;
 
@@ -49,11 +51,9 @@ class DigestAuth {
 
     await firstResponse.text();
 
-    return fetch(url, {
-      method,
-      headers: { Authorization: authHeader, ...(extraHeaders || {}) },
-      body,
-    });
+    const headers: Record<string, string> = { Authorization: authHeader, ...(extraHeaders || {}) };
+
+    return fetch(url, { method, headers, body });
   }
 }
 
@@ -77,97 +77,108 @@ serve(async (req) => {
     const auth = new DigestAuth(username, password);
 
     if (action === "get") {
-      // Get face photo from device
-      // Dahua/Intelbras: GET /cgi-bin/FaceInfoManager.cgi?action=get&UserID=<id>
-      const url = `${deviceUrl}/cgi-bin/FaceInfoManager.cgi?action=get&UserID=${encodeURIComponent(personId)}`;
-      console.log(`Getting face from: ${url}`);
+      // Try multiple endpoints to get face photo
+      const endpoints = [
+        `${deviceUrl}/cgi-bin/FaceInfoManager.cgi?action=get&UserID=${encodeURIComponent(personId)}`,
+        `${deviceUrl}/cgi-bin/AccessFace.cgi?action=list&UserID=${encodeURIComponent(personId)}`,
+        `${deviceUrl}/cgi-bin/recordFinder.cgi?action=find&name=AccessControlFaceInfo&count=100`,
+      ];
 
-      const response = await auth.request(url);
-      
-      if (!response.ok) {
-        // Try alternative endpoint
-        const altUrl = `${deviceUrl}/cgi-bin/FaceRecognitionServer.cgi?action=getFaceImage&userId=${encodeURIComponent(personId)}&faceIndex=0`;
-        console.log(`Trying alternative: ${altUrl}`);
-        const altResponse = await auth.request(altUrl);
-        
-        if (!altResponse.ok) {
-          return new Response(JSON.stringify({ 
-            error: "Não foi possível obter a foto do dispositivo",
-            status: response.status,
-            altStatus: altResponse.status
-          }), {
-            status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-        
-        const contentType = altResponse.headers.get("content-type") || "";
-        if (contentType.includes("image")) {
-          const imageData = await altResponse.arrayBuffer();
-          const base64 = btoa(String.fromCharCode(...new Uint8Array(imageData)));
-          return new Response(JSON.stringify({ 
-            success: true, 
-            photo: `data:${contentType};base64,${base64}` 
-          }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
+      for (const url of endpoints) {
+        console.log(`Trying GET face: ${url}`);
+        try {
+          const response = await auth.request(url);
+          const contentType = response.headers.get("content-type") || "";
+          console.log(`Response status: ${response.status}, content-type: ${contentType}`);
 
-        const text = await altResponse.text();
-        return new Response(JSON.stringify({ error: "Resposta inesperada", raw: text.slice(0, 500) }), {
-          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      const contentType = response.headers.get("content-type") || "";
-      
-      // If the response is multipart, extract the image
-      if (contentType.includes("multipart") || contentType.includes("image")) {
-        const imageData = await response.arrayBuffer();
-        // Try to find JPEG in the data (starts with FF D8)
-        const bytes = new Uint8Array(imageData);
-        let jpegStart = -1;
-        for (let i = 0; i < bytes.length - 1; i++) {
-          if (bytes[i] === 0xFF && bytes[i + 1] === 0xD8) {
-            jpegStart = i;
-            break;
+          if (response.status === 501 || response.status === 404) {
+            console.log(`Endpoint not supported (${response.status}), trying next...`);
+            await response.text(); // consume
+            continue;
           }
-        }
 
-        if (jpegStart >= 0) {
-          const jpegData = bytes.slice(jpegStart);
-          const base64 = btoa(String.fromCharCode(...jpegData));
-          return new Response(JSON.stringify({ 
-            success: true, 
-            photo: `data:image/jpeg;base64,${base64}` 
-          }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
+          // If image response
+          if (contentType.includes("image")) {
+            const imageData = await response.arrayBuffer();
+            const base64 = base64Encode(new Uint8Array(imageData));
+            return new Response(JSON.stringify({
+              success: true,
+              photo: `data:image/jpeg;base64,${base64}`
+            }), {
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
 
-        // If not multipart, try as full image
-        const base64 = btoa(String.fromCharCode(...bytes));
-        return new Response(JSON.stringify({ 
-          success: true, 
-          photo: `data:image/jpeg;base64,${base64}` 
-        }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+          // If multipart response (common for Dahua face retrieval)
+          if (contentType.includes("multipart")) {
+            const data = await response.arrayBuffer();
+            const bytes = new Uint8Array(data);
+            // Find JPEG start (FF D8) and end (FF D9)
+            let jpegStart = -1;
+            for (let i = 0; i < bytes.length - 1; i++) {
+              if (bytes[i] === 0xFF && bytes[i + 1] === 0xD8) { jpegStart = i; break; }
+            }
+            if (jpegStart >= 0) {
+              const base64 = base64Encode(bytes.slice(jpegStart));
+              return new Response(JSON.stringify({
+                success: true,
+                photo: `data:image/jpeg;base64,${base64}`
+              }), {
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+              });
+            }
+          }
+
+          // Text/JSON response - check if it has base64 photo data
+          const text = await response.text();
+          console.log(`Text response (first 500): ${text.slice(0, 500)}`);
+
+          // Parse records format for PhotoData
+          const photoMatch = text.match(/PhotoData\[0\]=(.+)/);
+          if (photoMatch) {
+            return new Response(JSON.stringify({
+              success: true,
+              photo: `data:image/jpeg;base64,${photoMatch[1].trim()}`
+            }), {
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+
+          // Try parsing as JSON
+          try {
+            const json = JSON.parse(text);
+            if (json.PhotoData && json.PhotoData.length > 0) {
+              return new Response(JSON.stringify({
+                success: true,
+                photo: `data:image/jpeg;base64,${json.PhotoData[0]}`
+              }), {
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+              });
+            }
+          } catch { /* not JSON */ }
+
+          if (response.ok && !text.includes("error") && !text.includes("Error")) {
+            console.log(`Got response but no photo data found`);
+          }
+        } catch (err) {
+          console.log(`Endpoint error: ${err.message}`);
+        }
       }
 
-      const text = await response.text();
-      return new Response(JSON.stringify({ error: "Foto não encontrada", raw: text.slice(0, 500) }), {
+      return new Response(JSON.stringify({
+        error: "Não foi possível obter a foto do dispositivo. Os endpoints testados não são suportados por este modelo.",
+      }), {
         status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
 
     } else if (action === "set") {
-      // Send face photo to device
       if (!personId || !photoUrl) {
         return new Response(JSON.stringify({ error: "personId e photoUrl são obrigatórios" }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      // Download the photo from our storage
+      // Download the photo
       console.log(`Downloading photo from: ${photoUrl}`);
       const photoResponse = await fetch(photoUrl);
       if (!photoResponse.ok) {
@@ -175,97 +186,94 @@ serve(async (req) => {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const photoBlob = await photoResponse.blob();
-      const photoArrayBuffer = await photoBlob.arrayBuffer();
-      const photoBytes = new Uint8Array(photoArrayBuffer);
+      const photoArrayBuffer = await photoResponse.arrayBuffer();
+      const photoBase64 = base64Encode(new Uint8Array(photoArrayBuffer));
 
-      // Build multipart body for Dahua/Intelbras FaceInfoManager
-      const boundary = "----WebKitFormBoundary" + crypto.randomUUID().replace(/-/g, "").slice(0, 16);
-      
-      // JSON metadata part
-      const jsonPart = JSON.stringify({ UserID: personId });
-      
-      // Build multipart manually
-      const encoder = new TextEncoder();
-      const parts: Uint8Array[] = [];
-      
-      // Part 1: JSON metadata
-      parts.push(encoder.encode(
-        `--${boundary}\r\n` +
-        `Content-Disposition: form-data; name="data"\r\n` +
-        `Content-Type: application/json\r\n\r\n` +
-        `${jsonPart}\r\n`
-      ));
-      
-      // Part 2: Image file
-      parts.push(encoder.encode(
-        `--${boundary}\r\n` +
-        `Content-Disposition: form-data; name="photo"; filename="face.jpg"\r\n` +
-        `Content-Type: image/jpeg\r\n\r\n`
-      ));
-      parts.push(photoBytes);
-      parts.push(encoder.encode(`\r\n--${boundary}--\r\n`));
+      // Try multiple methods to add face
+      const methods = [
+        {
+          name: "FaceInfoManager (JSON body)",
+          url: `${deviceUrl}/cgi-bin/FaceInfoManager.cgi?action=add`,
+          body: JSON.stringify({ UserID: personId, PhotoData: [photoBase64] }),
+          contentType: "application/json",
+        },
+        {
+          name: "AccessFace insert",
+          url: `${deviceUrl}/cgi-bin/AccessFace.cgi?action=insertMulti`,
+          body: JSON.stringify({ FaceList: [{ UserID: personId, PhotoData: [photoBase64] }] }),
+          contentType: "application/json",
+        },
+        {
+          name: "recordUpdater FaceInfo",
+          url: `${deviceUrl}/cgi-bin/recordUpdater.cgi?action=insert&name=AccessControlFaceInfo`,
+          body: `UserID=${personId}&PhotoData[0]=${photoBase64}`,
+          contentType: "application/x-www-form-urlencoded",
+        },
+      ];
 
-      // Combine all parts
-      const totalLength = parts.reduce((sum, p) => sum + p.length, 0);
-      const body = new Uint8Array(totalLength);
-      let offset = 0;
-      for (const part of parts) {
-        body.set(part, offset);
-        offset += part.length;
-      }
+      const results: any[] = [];
 
-      const url = `${deviceUrl}/cgi-bin/FaceInfoManager.cgi?action=add`;
-      console.log(`Sending face to: ${url}`);
-
-      const response = await auth.request(url, "POST", body, {
-        "Content-Type": `multipart/form-data; boundary=${boundary}`,
-      });
-
-      const text = await response.text();
-      console.log(`Set face response (${response.status}): ${text.slice(0, 500)}`);
-
-      if (text.includes("OK") || text.includes("ok") || response.ok) {
-        return new Response(JSON.stringify({ success: true, message: "Foto enviada ao dispositivo" }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      // Try alternative: update existing face
-      if (text.includes("Already Exist") || text.includes("exist")) {
-        const updateUrl = `${deviceUrl}/cgi-bin/FaceInfoManager.cgi?action=update`;
-        console.log(`Face exists, updating: ${updateUrl}`);
-        
-        const updateResponse = await auth.request(updateUrl, "POST", body, {
-          "Content-Type": `multipart/form-data; boundary=${boundary}`,
-        });
-        const updateText = await updateResponse.text();
-        console.log(`Update face response (${updateResponse.status}): ${updateText.slice(0, 500)}`);
-
-        if (updateText.includes("OK") || updateText.includes("ok") || updateResponse.ok) {
-          return new Response(JSON.stringify({ success: true, message: "Foto atualizada no dispositivo" }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+      for (const method of methods) {
+        console.log(`Trying SET face: ${method.name} -> ${method.url}`);
+        try {
+          const response = await auth.request(method.url, "POST", method.body, {
+            "Content-Type": method.contentType,
           });
-        }
+          const text = await response.text();
+          console.log(`${method.name} response (${response.status}): ${text.slice(0, 500)}`);
 
-        return new Response(JSON.stringify({ error: "Erro ao atualizar foto", raw: updateText.slice(0, 500) }), {
-          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+          results.push({ method: method.name, status: response.status, response: text.slice(0, 300) });
+
+          if (response.status === 501 || response.status === 404) continue;
+
+          const isSuccess = text.includes("OK") || text.includes("ok") || 
+                           text.includes('"result":true') || text.includes("Result=1") ||
+                           (response.ok && !text.includes("Error") && !text.includes("error"));
+
+          if (isSuccess) {
+            return new Response(JSON.stringify({ success: true, message: "Foto enviada ao dispositivo!", method: method.name }), {
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+
+          // If face already exists, try update
+          if (text.includes("Already Exist") || text.includes("exist") || text.includes("Existed")) {
+            const updateUrl = method.url.replace("add", "update").replace("insert", "update");
+            console.log(`Face exists, trying update: ${updateUrl}`);
+            const updateResp = await auth.request(updateUrl, "POST", method.body, {
+              "Content-Type": method.contentType,
+            });
+            const updateText = await updateResp.text();
+            console.log(`Update response (${updateResp.status}): ${updateText.slice(0, 500)}`);
+
+            const updateSuccess = updateText.includes("OK") || updateText.includes("ok") || updateResp.ok;
+            if (updateSuccess) {
+              return new Response(JSON.stringify({ success: true, message: "Foto atualizada no dispositivo!", method: method.name }), {
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+              });
+            }
+          }
+        } catch (err) {
+          console.log(`${method.name} error: ${err.message}`);
+          results.push({ method: method.name, error: err.message });
+        }
       }
 
-      return new Response(JSON.stringify({ error: "Erro ao enviar foto", raw: text.slice(0, 500) }), {
+      return new Response(JSON.stringify({
+        error: "Nenhum método de envio funcionou com este dispositivo",
+        details: results,
+      }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
 
     } else if (action === "delete") {
       const url = `${deviceUrl}/cgi-bin/FaceInfoManager.cgi?action=remove&UserID=${encodeURIComponent(personId)}`;
       console.log(`Deleting face: ${url}`);
-      
-      const response = await auth.request(url, "GET");
+      const response = await auth.request(url);
       const text = await response.text();
-      console.log(`Delete face response: ${text.slice(0, 500)}`);
+      console.log(`Delete response: ${text.slice(0, 500)}`);
 
-      return new Response(JSON.stringify({ 
+      return new Response(JSON.stringify({
         success: text.includes("OK") || text.includes("ok") || response.ok,
         message: "Foto removida do dispositivo"
       }), {
