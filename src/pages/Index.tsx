@@ -2,6 +2,8 @@ import { Shield, CheckCircle, Camera, Bell, BarChart3, Users, ArrowRight } from 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useNavigate } from 'react-router-dom';
+import heroFacialRecognition from '@/assets/hero-facial-recognition.png';
+import heroDeviceIntelbras from '@/assets/hero-device-intelbras.png';
 
 const WHATSAPP_NUMBER = '553131570638';
 const WHATSAPP_URL = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent('Olá! Tenho interesse no SafeSchool. Gostaria de saber mais sobre o sistema.')}`;
