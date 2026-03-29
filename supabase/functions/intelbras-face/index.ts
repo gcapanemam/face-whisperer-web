@@ -76,6 +76,34 @@ serve(async (req) => {
     const { action, personId, photoUrl } = await req.json();
     const auth = new DigestAuth(username, password);
 
+    if (action === "probe") {
+      // Discover which face-related endpoints this device supports
+      const probeEndpoints = [
+        `${deviceUrl}/cgi-bin/FaceInfoManager.cgi?action=get&UserID=1`,
+        `${deviceUrl}/cgi-bin/AccessFace.cgi?action=list&UserID=1`,
+        `${deviceUrl}/cgi-bin/recordFinder.cgi?action=find&name=AccessControlFaceInfo&count=1`,
+        `${deviceUrl}/cgi-bin/recordFinder.cgi?action=find&name=FaceInfo&count=1`,
+        `${deviceUrl}/cgi-bin/recordFinder.cgi?action=find&name=AccessControlFace&count=1`,
+        `${deviceUrl}/cgi-bin/recordFinder.cgi?action=getCollect&name=AccessControlCard`,
+        `${deviceUrl}/cgi-bin/configManager.cgi?action=getConfig&name=FaceRecognitionServer`,
+        `${deviceUrl}/cgi-bin/snap.cgi?channel=0`,
+      ];
+      const results: any[] = [];
+      for (const url of probeEndpoints) {
+        try {
+          const r = await auth.request(url);
+          const ct = r.headers.get("content-type") || "";
+          const text = ct.includes("image") ? `[image data ${r.status}]` : await r.text();
+          results.push({ url: url.replace(deviceUrl, ""), status: r.status, contentType: ct, body: text.slice(0, 300) });
+        } catch (e) {
+          results.push({ url: url.replace(deviceUrl, ""), error: e.message });
+        }
+      }
+      return new Response(JSON.stringify({ results }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     if (action === "get") {
       // Try multiple endpoints to get face photo
       const endpoints = [
