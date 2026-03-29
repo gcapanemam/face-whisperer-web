@@ -82,6 +82,7 @@ export default function Guardians() {
       phone: phone || null,
       cpf: cpf || null,
       email: email || null,
+      photo_url: photoUrl || null,
       intelbras_person_id: intelbrasPersonId || null,
     }).select().single();
 
