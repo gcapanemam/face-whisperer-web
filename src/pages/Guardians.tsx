@@ -314,6 +314,7 @@ export default function Guardians() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-12"></TableHead>
                 <TableHead>Nome</TableHead>
                 <TableHead>Telefone</TableHead>
                 <TableHead>CPF</TableHead>
@@ -324,6 +325,14 @@ export default function Guardians() {
             <TableBody>
               {filtered.map(g => (
                 <TableRow key={g.id}>
+                  <TableCell>
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src={g.photo_url || undefined} />
+                      <AvatarFallback className="text-xs bg-secondary">
+                        {g.full_name[0]}
+                      </AvatarFallback>
+                    </Avatar>
+                  </TableCell>
                   <TableCell className="font-medium">{g.full_name}</TableCell>
                   <TableCell>{g.phone || '—'}</TableCell>
                   <TableCell>{g.cpf || '—'}</TableCell>
