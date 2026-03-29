@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Loader2, Pencil } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const roleLabels: Record<string, string> = {
@@ -28,18 +28,15 @@ export default function Users() {
   const [classroomId, setClassroomId] = useState('');
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [editUserId, setEditUserId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const fetchUsers = async () => {
     const { data: roles } = await supabase.from('user_roles').select('user_id, role');
     if (!roles) return;
-
     const userIds = roles.map(r => r.user_id);
     const { data: profiles } = await supabase.from('profiles').select('*').in('user_id', userIds);
-
-    // Get classroom assignments for teachers
     const { data: rooms } = await supabase.from('classrooms').select('id, name, teacher_user_id');
-
     const merged = roles.map(r => ({
       ...r,
       profile: profiles?.find(p => p.user_id === r.user_id),
@@ -53,12 +50,42 @@ export default function Users() {
     setClassrooms(data || []);
   };
 
-  useEffect(() => {
-    fetchUsers();
-    fetchClassrooms();
-  }, []);
+  useEffect(() => { fetchUsers(); fetchClassrooms(); }, []);
 
-  const handleCreate = async () => {
+  const resetForm = () => {
+    setEmail(''); setPassword(''); setFullName(''); setRole('teacher'); setClassroomId(''); setEditUserId(null);
+  };
+
+  const openEdit = (u: any) => {
+    setEditUserId(u.user_id);
+    setFullName(u.profile?.full_name || '');
+    setEmail(u.profile?.email || '');
+    setPassword('');
+    setRole(u.role);
+    setClassroomId(u.classroom?.id || '');
+    setOpen(true);
+  };
+
+  const handleSave = async () => {
+    if (editUserId) {
+      // Update profile
+      const { error } = await supabase.from('profiles').update({ full_name: fullName }).eq('user_id', editUserId);
+      if (error) {
+        toast({ title: 'Erro', description: error.message, variant: 'destructive' });
+        return;
+      }
+      // Update role
+      await supabase.from('user_roles').update({ role: role as any }).eq('user_id', editUserId);
+      // Update classroom link
+      await supabase.from('classrooms').update({ teacher_user_id: null }).eq('teacher_user_id', editUserId);
+      if (role === 'teacher' && classroomId) {
+        await supabase.from('classrooms').update({ teacher_user_id: editUserId }).eq('id', classroomId);
+      }
+      toast({ title: 'Usuário atualizado!' });
+      resetForm(); setOpen(false); fetchUsers(); fetchClassrooms();
+      return;
+    }
+
     if (!email || !password || !fullName) {
       toast({ title: 'Erro', description: 'Preencha todos os campos obrigatórios.', variant: 'destructive' });
       return;
@@ -67,23 +94,12 @@ export default function Users() {
     setCreating(true);
     try {
       const { data, error } = await supabase.functions.invoke('create-user', {
-        body: {
-          email,
-          password,
-          full_name: fullName,
-          role,
-          classroom_id: role === 'teacher' ? classroomId || null : null,
-        },
+        body: { email, password, full_name: fullName, role, classroom_id: role === 'teacher' ? classroomId || null : null },
       });
-
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-
       toast({ title: 'Usuário criado com sucesso!' });
-      setEmail(''); setPassword(''); setFullName(''); setRole('teacher'); setClassroomId('');
-      setOpen(false);
-      fetchUsers();
-      fetchClassrooms();
+      resetForm(); setOpen(false); fetchUsers(); fetchClassrooms();
     } catch (err: any) {
       toast({ title: 'Erro ao criar usuário', description: err.message, variant: 'destructive' });
     } finally {
@@ -93,14 +109,11 @@ export default function Users() {
 
   const handleDelete = async (userId: string) => {
     await supabase.from('user_roles').delete().eq('user_id', userId);
-    // Also unlink from classroom
     await supabase.from('classrooms').update({ teacher_user_id: null }).eq('teacher_user_id', userId);
-    fetchUsers();
-    fetchClassrooms();
+    fetchUsers(); fetchClassrooms();
   };
 
-  // Classrooms without a teacher assigned (or current selection)
-  const availableClassrooms = classrooms.filter(c => !c.teacher_user_id);
+  const availableClassrooms = classrooms.filter(c => !c.teacher_user_id || c.teacher_user_id === editUserId);
 
   return (
     <div className="space-y-6">
@@ -109,25 +122,29 @@ export default function Users() {
           <h1 className="font-display text-2xl font-bold">Usuários</h1>
           <p className="text-muted-foreground">Gerenciar usuários do sistema</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetForm(); }}>
           <DialogTrigger asChild>
             <Button><Plus className="h-4 w-4 mr-1" /> Novo Usuário</Button>
           </DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>Criar Usuário</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>{editUserId ? 'Editar Usuário' : 'Criar Usuário'}</DialogTitle></DialogHeader>
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label>Nome Completo</Label>
                 <Input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Nome completo" />
               </div>
-              <div className="space-y-2">
-                <Label>Email</Label>
-                <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="email@escola.com" />
-              </div>
-              <div className="space-y-2">
-                <Label>Senha</Label>
-                <Input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Mínimo 6 caracteres" />
-              </div>
+              {!editUserId && (
+                <>
+                  <div className="space-y-2">
+                    <Label>Email</Label>
+                    <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="email@escola.com" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Senha</Label>
+                    <Input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Mínimo 6 caracteres" />
+                  </div>
+                </>
+              )}
               <div className="space-y-2">
                 <Label>Perfil</Label>
                 <Select value={role} onValueChange={(v) => { setRole(v); if (v !== 'teacher') setClassroomId(''); }}>
@@ -152,13 +169,12 @@ export default function Users() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">Você pode vincular a sala depois em "Salas".</p>
                 </div>
               )}
 
-              <Button onClick={handleCreate} className="w-full" disabled={creating}>
+              <Button onClick={handleSave} className="w-full" disabled={creating}>
                 {creating && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
-                Criar Usuário
+                {editUserId ? 'Salvar' : 'Criar Usuário'}
               </Button>
             </div>
           </DialogContent>
@@ -174,7 +190,7 @@ export default function Users() {
                 <TableHead>Email</TableHead>
                 <TableHead>Perfil</TableHead>
                 <TableHead>Sala</TableHead>
-                <TableHead className="w-12"></TableHead>
+                <TableHead className="w-24">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -182,22 +198,23 @@ export default function Users() {
                 <TableRow key={u.user_id}>
                   <TableCell className="font-medium">{u.profile?.full_name || '—'}</TableCell>
                   <TableCell>{u.profile?.email || '—'}</TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">{roleLabels[u.role] || u.role}</Badge>
-                  </TableCell>
+                  <TableCell><Badge variant="secondary">{roleLabels[u.role] || u.role}</Badge></TableCell>
                   <TableCell>{u.classroom?.name || '—'}</TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="icon" onClick={() => handleDelete(u.user_id)}>
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" onClick={() => openEdit(u)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(u.user_id)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
               {users.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                    Nenhum usuário cadastrado.
-                  </TableCell>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">Nenhum usuário cadastrado.</TableCell>
                 </TableRow>
               )}
             </TableBody>

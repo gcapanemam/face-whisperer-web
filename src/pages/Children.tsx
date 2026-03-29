@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Plus, Trash2, Search } from 'lucide-react';
+import { Plus, Trash2, Search, Pencil } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PhotoUpload } from '@/components/PhotoUpload';
 
@@ -20,6 +20,7 @@ export default function Children() {
   const [classroomId, setClassroomId] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
   const [open, setOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const fetchData = async () => {
@@ -33,18 +34,43 @@ export default function Children() {
 
   useEffect(() => { fetchData(); }, []);
 
-  const handleCreate = async () => {
-    const { error } = await supabase.from('children').insert({
-      full_name: name,
-      classroom_id: classroomId || null,
-      photo_url: photoUrl || null,
-    });
-    if (error) {
-      toast({ title: 'Erro', description: error.message, variant: 'destructive' });
+  const resetForm = () => {
+    setName(''); setClassroomId(''); setPhotoUrl(''); setEditId(null);
+  };
+
+  const openEdit = (child: any) => {
+    setEditId(child.id);
+    setName(child.full_name);
+    setClassroomId(child.classroom_id || '');
+    setPhotoUrl(child.photo_url || '');
+    setOpen(true);
+  };
+
+  const handleSave = async () => {
+    if (editId) {
+      const { error } = await supabase.from('children').update({
+        full_name: name,
+        classroom_id: classroomId || null,
+        photo_url: photoUrl || null,
+      }).eq('id', editId);
+      if (error) {
+        toast({ title: 'Erro', description: error.message, variant: 'destructive' });
+      } else {
+        toast({ title: 'Criança atualizada!' });
+        resetForm(); setOpen(false); fetchData();
+      }
     } else {
-      toast({ title: 'Criança cadastrada!' });
-      setName(''); setClassroomId(''); setPhotoUrl(''); setOpen(false);
-      fetchData();
+      const { error } = await supabase.from('children').insert({
+        full_name: name,
+        classroom_id: classroomId || null,
+        photo_url: photoUrl || null,
+      });
+      if (error) {
+        toast({ title: 'Erro', description: error.message, variant: 'destructive' });
+      } else {
+        toast({ title: 'Criança cadastrada!' });
+        resetForm(); setOpen(false); fetchData();
+      }
     }
   };
 
@@ -62,12 +88,12 @@ export default function Children() {
           <h1 className="font-display text-2xl font-bold">Crianças</h1>
           <p className="text-muted-foreground">{children.length} cadastradas</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetForm(); }}>
           <DialogTrigger asChild>
             <Button><Plus className="h-4 w-4 mr-1" /> Nova Criança</Button>
           </DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>Cadastrar Criança</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>{editId ? 'Editar Criança' : 'Cadastrar Criança'}</DialogTitle></DialogHeader>
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label>Foto</Label>
@@ -93,7 +119,7 @@ export default function Children() {
                   </SelectContent>
                 </Select>
               </div>
-              <Button onClick={handleCreate} className="w-full">Cadastrar</Button>
+              <Button onClick={handleSave} className="w-full">{editId ? 'Salvar' : 'Cadastrar'}</Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -112,7 +138,7 @@ export default function Children() {
                 <TableHead className="w-12"></TableHead>
                 <TableHead>Nome</TableHead>
                 <TableHead>Sala</TableHead>
-                <TableHead className="w-12"></TableHead>
+                <TableHead className="w-24">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -129,9 +155,14 @@ export default function Children() {
                   <TableCell className="font-medium">{child.full_name}</TableCell>
                   <TableCell>{child.classrooms?.name || '—'}</TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="icon" onClick={() => handleDelete(child.id)}>
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" onClick={() => openEdit(child)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(child.id)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
