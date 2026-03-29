@@ -179,16 +179,38 @@ serve(async (req) => {
         ],
       });
 
-      const insertUrl = `${deviceUrl}/cgi-bin/AccessFace.cgi?action=insertMulti`;
-      console.log(`insertMulti (JSON): ${insertUrl}, body length: ${jsonBody.length}`);
-      const insertResp = await auth.request(insertUrl, "POST", jsonBody, {
+      const startUrl = `${deviceUrl}/cgi-bin/AccessFace.cgi?action=startFind&condition.UserID=${encodeURIComponent(personId)}`;
+      const startResp = await auth.request(startUrl);
+      const startText = await startResp.text();
+      console.log(`set startFind: ${startText}`);
+
+      let startData: { Total?: number; Token?: string } | null = null;
+      try { startData = JSON.parse(startText); } catch {}
+
+      const hasExistingFace = Boolean(startData?.Total && startData.Total > 0);
+      if (startData?.Token) {
+        try {
+          await auth.request(`${deviceUrl}/cgi-bin/AccessFace.cgi?action=stopFind&Token=${startData.Token}`);
+        } catch {
+          // ignore cleanup errors
+        }
+      }
+
+      const actionName = hasExistingFace ? "updateMulti" : "insertMulti";
+      const actionUrl = `${deviceUrl}/cgi-bin/AccessFace.cgi?action=${actionName}`;
+
+      console.log(`${actionName} (JSON): ${actionUrl}, body length: ${jsonBody.length}`);
+      const jsonResp = await auth.request(actionUrl, "POST", jsonBody, {
         "Content-Type": "application/json",
       });
-      const insertText = await insertResp.text();
-      console.log(`insertMulti JSON response (${insertResp.status}): ${insertText.slice(0, 500)}`);
+      const jsonText = await jsonResp.text();
+      console.log(`${actionName} JSON response (${jsonResp.status}): ${jsonText.slice(0, 500)}`);
 
-      if (insertResp.ok && !insertText.toLowerCase().includes("error")) {
-        return new Response(JSON.stringify({ success: true, message: "Foto enviada ao dispositivo!" }), {
+      if (jsonResp.ok && !jsonText.toLowerCase().includes("error") && !jsonText.toLowerCase().includes("batch process error")) {
+        return new Response(JSON.stringify({
+          success: true,
+          message: hasExistingFace ? "Foto atualizada no dispositivo!" : "Foto enviada ao dispositivo!",
+        }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -197,47 +219,27 @@ serve(async (req) => {
       formBody.set("FaceList[0].UserID", personId);
       formBody.set("FaceList[0].PhotoData[0]", photoBase64);
 
-      console.log(`insertMulti (form body): ${insertUrl}, body length: ${formBody.toString().length}`);
-      const formResp = await auth.request(insertUrl, "POST", formBody.toString(), {
+      console.log(`${actionName} (form body): ${actionUrl}, body length: ${formBody.toString().length}`);
+      const formResp = await auth.request(actionUrl, "POST", formBody.toString(), {
         "Content-Type": "application/x-www-form-urlencoded",
       });
       const formText = await formResp.text();
-      console.log(`insertMulti form response (${formResp.status}): ${formText.slice(0, 500)}`);
+      console.log(`${actionName} form response (${formResp.status}): ${formText.slice(0, 500)}`);
 
-      if (formResp.ok && !formText.toLowerCase().includes("error")) {
-        return new Response(JSON.stringify({ success: true, message: "Foto enviada ao dispositivo!" }), {
+      if (formResp.ok && !formText.toLowerCase().includes("error") && !formText.toLowerCase().includes("batch process error")) {
+        return new Response(JSON.stringify({
+          success: true,
+          message: hasExistingFace ? "Foto atualizada no dispositivo!" : "Foto enviada ao dispositivo!",
+        }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      const alreadyExists = [insertText, formText].some((text) =>
-        text.includes("Exist") || text.includes("exist") || text.includes("Already")
-      );
-
-      if (alreadyExists) {
-        const updateUrl = `${deviceUrl}/cgi-bin/AccessFace.cgi?action=updateMulti`;
-        console.log(`updateMulti (form body): ${updateUrl}`);
-        const updateResp = await auth.request(updateUrl, "POST", formBody.toString(), {
-          "Content-Type": "application/x-www-form-urlencoded",
-        });
-        const updateText = await updateResp.text();
-        console.log(`updateMulti response (${updateResp.status}): ${updateText.slice(0, 500)}`);
-
-        if (updateResp.ok && !updateText.toLowerCase().includes("error")) {
-          return new Response(JSON.stringify({ success: true, message: "Foto atualizada no dispositivo!" }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-
-        return new Response(JSON.stringify({ error: "Erro ao atualizar foto", raw: updateText.slice(0, 300) }), {
-          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
       return new Response(JSON.stringify({
-        error: "Erro ao enviar foto",
-        raw: formText.slice(0, 300) || insertText.slice(0, 300),
-        jsonRaw: insertText.slice(0, 300),
+        error: hasExistingFace ? "Erro ao atualizar foto" : "Erro ao enviar foto",
+        raw: formText.slice(0, 300) || jsonText.slice(0, 300),
+        jsonRaw: jsonText.slice(0, 300),
+        faceExists: hasExistingFace,
       }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
