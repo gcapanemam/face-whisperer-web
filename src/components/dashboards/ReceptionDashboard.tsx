@@ -12,6 +12,8 @@ export function ReceptionDashboard() {
   const [deviceStatus, setDeviceStatus] = useState<'online' | 'offline' | 'polling' | 'unknown'>('unknown');
   const [lastPoll, setLastPoll] = useState<string | null>(null);
   const [isPolling, setIsPolling] = useState(false);
+  const [devices, setDevices] = useState<any[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>('all');
 
   const fetchEvents = async () => {
     const { data } = await supabase
