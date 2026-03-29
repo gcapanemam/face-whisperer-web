@@ -179,23 +179,47 @@ export function ReceptionDashboard() {
           {events.length === 0 ? (
             <p className="text-muted-foreground text-sm">Nenhum evento hoje.</p>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {events.map((ev) => (
-                <div key={ev.id} className="flex items-center justify-between rounded-lg border p-3">
-                  <div className="flex items-center gap-3">
-                    <div className="text-xs text-muted-foreground font-mono">
-                      {new Date(ev.recognized_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                    </div>
-                    <div>
-                      <p className="font-medium text-sm">{ev.guardians?.full_name || 'Desconhecido'}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {ev.children?.full_name} • {ev.classrooms?.name}
-                      </p>
+                <div key={ev.id} className="flex items-center gap-4 rounded-xl border p-4">
+                  {/* Guardian photo */}
+                  <Avatar className="h-16 w-16 shrink-0 border-2 border-primary/20">
+                    {ev.guardians?.photo_url ? (
+                      <AvatarImage src={ev.guardians.photo_url} alt={ev.guardians.full_name} className="object-cover" />
+                    ) : null}
+                    <AvatarFallback className="bg-primary/10 text-primary text-lg">
+                      <User className="h-7 w-7" />
+                    </AvatarFallback>
+                  </Avatar>
+
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-base truncate">{ev.guardians?.full_name || 'Desconhecido'}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Avatar className="h-10 w-10 border border-muted">
+                        {ev.children?.photo_url ? (
+                          <AvatarImage src={ev.children.photo_url} alt={ev.children.full_name} className="object-cover" />
+                        ) : null}
+                        <AvatarFallback className="bg-muted text-muted-foreground text-xs">
+                          {ev.children?.full_name?.charAt(0) || '?'}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="text-sm font-medium">{ev.children?.full_name}</p>
+                        <p className="text-xs text-muted-foreground">{ev.classrooms?.name}</p>
+                      </div>
                     </div>
                   </div>
-                  <span className={`rounded-full px-2 py-1 text-xs font-medium ${statusConfig[ev.status]?.class || ''}`}>
-                    {statusConfig[ev.status]?.label || ev.status}
-                  </span>
+
+                  {/* Time + status */}
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <div className="text-sm text-muted-foreground font-mono">
+                      {new Date(ev.recognized_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusConfig[ev.status]?.class || ''}`}>
+                      {statusConfig[ev.status]?.label || ev.status}
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
