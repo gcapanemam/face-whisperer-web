@@ -244,9 +244,21 @@ export default function Guardians() {
                   </Button>
                 </div>
                 {intelbrasPersonId && (
-                  <Badge variant="secondary" className="mt-1">
-                    <ScanFace className="h-3 w-3 mr-1" /> Vinculado: {intelbrasPersonId}
-                  </Badge>
+                  <div className="space-y-2 mt-1">
+                    <Badge variant="secondary">
+                      <ScanFace className="h-3 w-3 mr-1" /> Vinculado: {intelbrasPersonId}
+                    </Badge>
+                    <div className="flex gap-2">
+                      <Button type="button" variant="outline" size="sm" onClick={handleSendFaceToDevice} disabled={syncingFace || !photoUrl}>
+                        {syncingFace ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Upload className="h-3 w-3 mr-1" />}
+                        Enviar foto ao dispositivo
+                      </Button>
+                      <Button type="button" variant="outline" size="sm" onClick={handleGetFaceFromDevice} disabled={syncingFace}>
+                        {syncingFace ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Download className="h-3 w-3 mr-1" />}
+                        Buscar foto do dispositivo
+                      </Button>
+                    </div>
+                  </div>
                 )}
               </div>
               <div className="space-y-2">
