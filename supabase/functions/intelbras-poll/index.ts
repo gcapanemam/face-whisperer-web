@@ -8,7 +8,6 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Dahua/Intelbras Digest Auth implementation
 class DigestAuth {
   private username: string;
   private password: string;
@@ -24,17 +23,12 @@ class DigestAuth {
   }
 
   async authenticate(url: string, method: string = "GET"): Promise<Response> {
-    // First request to get the challenge
     const firstResponse = await fetch(url, { method, redirect: "manual" });
-
-    if (firstResponse.status !== 401) {
-      return firstResponse;
-    }
+    if (firstResponse.status !== 401) return firstResponse;
 
     const wwwAuth = firstResponse.headers.get("www-authenticate");
     if (!wwwAuth) throw new Error("No WWW-Authenticate header");
 
-    // Parse digest challenge
     const realm = wwwAuth.match(/realm="([^"]+)"/)?.[1] || "";
     const nonce = wwwAuth.match(/nonce="([^"]+)"/)?.[1] || "";
     const qop = wwwAuth.match(/qop="([^"]+)"/)?.[1] || "";
@@ -42,7 +36,6 @@ class DigestAuth {
     this.nc++;
     const ncStr = this.nc.toString(16).padStart(8, "0");
     const cnonce = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
-
     const uri = new URL(url).pathname + new URL(url).search;
 
     const ha1 = this.md5(`${this.username}:${realm}:${this.password}`);
@@ -59,14 +52,177 @@ class DigestAuth {
       qop ? `, qop=${qop.split(",")[0]}, nc=${ncStr}, cnonce="${cnonce}"` : ""
     }`;
 
-    // Consume the first response body
     await firstResponse.text();
-
-    return fetch(url, {
-      method,
-      headers: { Authorization: authHeader },
-    });
+    return fetch(url, { method, headers: { Authorization: authHeader } });
   }
+}
+
+interface DeviceConfig {
+  id: string;
+  device_url: string;
+  username: string;
+  password: string;
+  name: string;
+}
+
+async function getDevices(supabase: any, deviceId?: string): Promise<DeviceConfig[]> {
+  if (deviceId) {
+    const { data, error } = await supabase
+      .from("devices")
+      .select("id, device_url, username, password, name")
+      .eq("id", deviceId)
+      .single();
+    if (error || !data) {
+      // Fallback to env vars
+      return getFallbackDevice();
+    }
+    return [data];
+  }
+
+  // Get all enabled devices
+  const { data, error } = await supabase
+    .from("devices")
+    .select("id, device_url, username, password, name")
+    .eq("enabled", true);
+
+  if (data && data.length > 0) return data;
+
+  // Fallback to env vars
+  return getFallbackDevice();
+}
+
+function getFallbackDevice(): DeviceConfig[] {
+  const deviceUrl = Deno.env.get("INTELBRAS_DEVICE_URL");
+  const username = Deno.env.get("INTELBRAS_USERNAME");
+  const password = Deno.env.get("INTELBRAS_PASSWORD");
+  if (!deviceUrl || !username || !password) return [];
+  return [{
+    id: "env",
+    device_url: deviceUrl.replace(/#.*$/, '').replace(/\/+$/, ''),
+    username,
+    password,
+    name: "Dispositivo (env)",
+  }];
+}
+
+async function pollDevice(device: DeviceConfig, supabase: any, testOnly: boolean) {
+  const cleanUrl = device.device_url.replace(/#.*$/, '').replace(/\/+$/, '');
+  const auth = new DigestAuth(device.username, device.password);
+
+  let events: any[] = [];
+  let deviceStatus = "online";
+  const debugInfo: any = {};
+
+  const endpoints = [
+    `/cgi-bin/recordFinder.cgi?action=find&name=AccessControlCardRec&count=100`,
+    `/cgi-bin/accessControl.cgi?action=list&channel=1`,
+    `/cgi-bin/AccessControl.cgi?action=list&channel=1`,
+  ];
+
+  try {
+    for (const endpoint of endpoints) {
+      const url = `${cleanUrl}${endpoint}`;
+      console.log(`[${device.name}] Trying: ${url}`);
+      try {
+        const response = await auth.authenticate(url);
+        const text = await response.text();
+        if (text.includes("<!DOCTYPE") || text.includes("<html")) {
+          debugInfo[endpoint] = { status: response.status, type: "html" };
+          continue;
+        }
+        debugInfo[endpoint] = { status: response.status, type: "api", preview: text.slice(0, 200) };
+        if (response.ok) {
+          const parsed = parseDahuaResponse(text);
+          if (parsed.length > 0) {
+            events = parsed;
+            break;
+          }
+        }
+      } catch (endpointError) {
+        debugInfo[endpoint] = { error: endpointError.message };
+      }
+    }
+  } catch {
+    deviceStatus = "offline";
+  }
+
+  if (testOnly) {
+    return { deviceId: device.id, deviceName: device.name, deviceStatus, debugInfo };
+  }
+
+  // Process events
+  let processedCount = 0;
+  let pickupEventsCreated = 0;
+
+  for (const event of events) {
+    const personId = event.UserID || event.CardNo || event.PersonID || null;
+    const confidence = parseFloat(event.SimilarityScore || event.Similarity || "0");
+    const eventId = event.RecNo || `${personId}-${event.CreateTime || Date.now()}`;
+
+    const { data: existing } = await supabase
+      .from("recognition_log")
+      .select("id")
+      .eq("intelbras_event_id", eventId)
+      .limit(1)
+      .single();
+    if (existing) continue;
+
+    let guardianId: string | null = null;
+    let recognized = false;
+    if (personId) {
+      const { data: guardian } = await supabase
+        .from("guardians")
+        .select("id")
+        .eq("intelbras_person_id", personId)
+        .limit(1)
+        .single();
+      if (guardian) { guardianId = guardian.id; recognized = true; }
+    }
+
+    await supabase.from("recognition_log").insert({
+      intelbras_event_id: eventId,
+      intelbras_person_id: personId,
+      guardian_id: guardianId,
+      recognized,
+      confidence: confidence || null,
+      raw_data: event,
+    });
+    processedCount++;
+
+    if (recognized && guardianId) {
+      const { data: guardianChildren } = await supabase
+        .from("guardian_children")
+        .select("child_id, children(id, full_name, classroom_id)")
+        .eq("guardian_id", guardianId)
+        .eq("authorized", true);
+
+      if (guardianChildren) {
+        for (const gc of guardianChildren) {
+          const child = gc.children as any;
+          if (child?.classroom_id) {
+            await supabase.from("pickup_events").insert({
+              guardian_id: guardianId,
+              child_id: child.id,
+              classroom_id: child.classroom_id,
+              intelbras_event_id: eventId,
+              status: "pending",
+            });
+            pickupEventsCreated++;
+          }
+        }
+      }
+    }
+  }
+
+  return {
+    deviceId: device.id,
+    deviceName: device.name,
+    deviceStatus,
+    eventsFound: events.length,
+    eventsProcessed: processedCount,
+    pickupEventsCreated,
+    debugInfo,
+  };
 }
 
 serve(async (req) => {
@@ -75,181 +231,44 @@ serve(async (req) => {
   }
 
   try {
-    const deviceUrl = Deno.env.get("INTELBRAS_DEVICE_URL");
-    const username = Deno.env.get("INTELBRAS_USERNAME");
-    const password = Deno.env.get("INTELBRAS_PASSWORD");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
-    if (!deviceUrl || !username || !password) {
+    let deviceId: string | undefined;
+    let testOnly = false;
+    try {
+      const body = await req.json();
+      deviceId = body.deviceId;
+      testOnly = body.testOnly === true;
+    } catch {}
+
+    const devices = await getDevices(supabase, deviceId);
+    if (devices.length === 0) {
       return new Response(
-        JSON.stringify({ error: "Intelbras credentials not configured" }),
+        JSON.stringify({ error: "Nenhum dispositivo configurado" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Clean device URL - remove hash fragments and trailing slashes
-    const cleanUrl = deviceUrl.replace(/#.*$/, '').replace(/\/+$/, '');
-    
-    const supabase = createClient(supabaseUrl, supabaseKey);
-    const auth = new DigestAuth(username, password);
-
-    // Get the last processed event timestamp
-    const { data: lastEvent } = await supabase
-      .from("recognition_log")
-      .select("created_at")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .single();
-
-    const now = Math.floor(Date.now() / 1000);
-    const startTime = lastEvent
-      ? Math.floor(new Date(lastEvent.created_at).getTime() / 1000)
-      : now - 300;
-
-    console.log(`Polling Intelbras device: ${cleanUrl}`);
-    console.log(`Time range: ${new Date(startTime * 1000).toISOString()} to ${new Date(now * 1000).toISOString()}`);
-
-    let events: any[] = [];
-    let deviceStatus = "online";
-    let debugInfo: any = {};
-
-    // Try multiple Dahua/Intelbras API endpoints
-    const endpoints = [
-      `/cgi-bin/recordFinder.cgi?action=find&name=AccessControlCardRec&count=100`,
-      `/cgi-bin/accessControl.cgi?action=list&channel=1`,
-      `/cgi-bin/AccessControl.cgi?action=list&channel=1`,
-    ];
-
-    try {
-      for (const endpoint of endpoints) {
-        const url = `${cleanUrl}${endpoint}`;
-        console.log(`Trying endpoint: ${url}`);
-        
-        try {
-          const response = await auth.authenticate(url);
-          const text = await response.text();
-
-          console.log(`Response status: ${response.status}`);
-          console.log(`Response (first 500 chars): ${text.slice(0, 500)}`);
-
-          // Skip if we got HTML (web UI) instead of API data
-          if (text.includes("<!DOCTYPE") || text.includes("<html")) {
-            console.log("Got HTML response, skipping...");
-            debugInfo[endpoint] = { status: response.status, type: "html" };
-            continue;
-          }
-
-          debugInfo[endpoint] = { status: response.status, type: "api", preview: text.slice(0, 200) };
-
-          if (response.ok) {
-            const parsed = parseDahuaResponse(text);
-            if (parsed.length > 0) {
-              events = parsed;
-              console.log(`Found ${events.length} events from ${endpoint}`);
-              break;
-            }
-          }
-        } catch (endpointError) {
-          console.log(`Endpoint ${endpoint} error: ${endpointError.message}`);
-          debugInfo[endpoint] = { error: endpointError.message };
-        }
-      }
-    } catch (fetchError) {
-      console.error(`Device connection error: ${fetchError}`);
-      deviceStatus = "offline";
-    }
-
-    // Process recognized events
-    let processedCount = 0;
-    let pickupEventsCreated = 0;
-
-    for (const event of events) {
-      const personId = event.UserID || event.CardNo || event.PersonID || null;
-      const method = parseInt(event.Method || "0");
-      // Method 15 = face recognition in Dahua
-      const isFaceRecognition = method === 15 || method === 6;
-      const confidence = parseFloat(event.SimilarityScore || event.Similarity || "0");
-
-      // Check if we already processed this event
-      const eventId = event.RecNo || `${personId}-${event.CreateTime || now}`;
-      const { data: existing } = await supabase
-        .from("recognition_log")
-        .select("id")
-        .eq("intelbras_event_id", eventId)
-        .limit(1)
-        .single();
-
-      if (existing) continue;
-
-      // Find matching guardian
-      let guardianId: string | null = null;
-      let recognized = false;
-
-      if (personId) {
-        const { data: guardian } = await supabase
-          .from("guardians")
-          .select("id")
-          .eq("intelbras_person_id", personId)
-          .limit(1)
-          .single();
-
-        if (guardian) {
-          guardianId = guardian.id;
-          recognized = true;
-        }
-      }
-
-      // Log the recognition event
-      await supabase.from("recognition_log").insert({
-        intelbras_event_id: eventId,
-        intelbras_person_id: personId,
-        guardian_id: guardianId,
-        recognized,
-        confidence: confidence || null,
-        raw_data: event,
-      });
-      processedCount++;
-
-      // If recognized, create pickup events for each authorized child
-      if (recognized && guardianId) {
-        const { data: guardianChildren } = await supabase
-          .from("guardian_children")
-          .select("child_id, children(id, full_name, classroom_id)")
-          .eq("guardian_id", guardianId)
-          .eq("authorized", true);
-
-        if (guardianChildren) {
-          for (const gc of guardianChildren) {
-            const child = gc.children as any;
-            if (child?.classroom_id) {
-              await supabase.from("pickup_events").insert({
-                guardian_id: guardianId,
-                child_id: child.id,
-                classroom_id: child.classroom_id,
-                intelbras_event_id: eventId,
-                status: "pending",
-              });
-              pickupEventsCreated++;
-            }
-          }
-        }
+    const results = [];
+    for (const device of devices) {
+      try {
+        const result = await pollDevice(device, supabase, testOnly);
+        results.push(result);
+      } catch (err) {
+        results.push({ deviceId: device.id, deviceName: device.name, deviceStatus: "offline", error: err.message });
       }
     }
 
-    const result = {
+    // Aggregate status
+    const anyOnline = results.some(r => r.deviceStatus === "online");
+    return new Response(JSON.stringify({
       success: true,
-      deviceStatus,
-      eventsFound: events.length,
-      eventsProcessed: processedCount,
-      pickupEventsCreated,
-      debugInfo,
+      deviceStatus: anyOnline ? "online" : "offline",
+      devices: results,
       timestamp: new Date().toISOString(),
-    };
-
-    console.log(`Result: ${JSON.stringify(result)}`);
-
-    return new Response(JSON.stringify(result), {
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
@@ -261,18 +280,13 @@ serve(async (req) => {
   }
 });
 
-// Parse Dahua's key=value response format into array of event objects
 function parseDahuaResponse(text: string): any[] {
   const events: any[] = [];
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
-  
-  // Check if it's a totalCount/found response
   const totalMatch = text.match(/totalCount=(\d+)/);
   if (totalMatch && parseInt(totalMatch[1]) === 0) return [];
 
-  // Parse records[i].Key=Value format
   const records: Record<string, Record<string, string>> = {};
-
   for (const line of lines) {
     const match = line.match(/^records\[(\d+)\]\.(.+)=(.*)$/);
     if (match) {
@@ -281,12 +295,9 @@ function parseDahuaResponse(text: string): any[] {
       records[idx][key] = value;
     }
   }
-
   for (const key of Object.keys(records).sort((a, b) => parseInt(a) - parseInt(b))) {
     events.push(records[key]);
   }
-
-  // If no records format, try simple key=value
   if (events.length === 0 && lines.length > 0) {
     const singleEvent: Record<string, string> = {};
     for (const line of lines) {
@@ -295,10 +306,7 @@ function parseDahuaResponse(text: string): any[] {
         singleEvent[key.trim()] = valueParts.join("=").trim();
       }
     }
-    if (Object.keys(singleEvent).length > 2) {
-      events.push(singleEvent);
-    }
+    if (Object.keys(singleEvent).length > 2) events.push(singleEvent);
   }
-
   return events;
 }
