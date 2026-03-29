@@ -1,68 +1,44 @@
 
 
-# Gerenciamento de Dispositivos Intelbras pela Interface
+# Vincular Responsáveis a Dispositivos
 
-## Visão Geral
-Atualmente as credenciais do dispositivo Intelbras são fixas em variáveis de ambiente (secrets). O usuário quer poder editar URL, usuário e senha pelo sistema, e adicionar múltiplos dispositivos.
+## Problema
+O campo `intelbras_person_id` está na tabela `guardians`, mas com múltiplos dispositivos um responsável pode ter IDs diferentes em cada aparelho, ou estar cadastrado apenas em alguns.
 
-## Mudanças
+## Solução
 
-### 1. Nova tabela `devices` (migração)
+### 1. Nova tabela `guardian_devices` (migração)
 ```sql
-CREATE TABLE public.devices (
+CREATE TABLE public.guardian_devices (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name text NOT NULL,
-  device_url text NOT NULL,
-  username text NOT NULL,
-  password text NOT NULL,
-  enabled boolean NOT NULL DEFAULT true,
+  guardian_id uuid NOT NULL REFERENCES public.guardians(id) ON DELETE CASCADE,
+  device_id uuid NOT NULL REFERENCES public.devices(id) ON DELETE CASCADE,
+  intelbras_person_id text NOT NULL,
+  synced boolean NOT NULL DEFAULT false,
   created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
+  UNIQUE (guardian_id, device_id)
 );
-
-ALTER TABLE public.devices ENABLE ROW LEVEL SECURITY;
-
--- Apenas admins gerenciam dispositivos
-CREATE POLICY "Admins can manage devices" ON public.devices FOR ALL
-  USING (has_role(auth.uid(), 'admin'::app_role));
-
--- Recepção pode visualizar dispositivos
-CREATE POLICY "Reception can view devices" ON public.devices FOR SELECT
-  USING (has_role(auth.uid(), 'reception'::app_role));
-
--- Trigger de updated_at
-CREATE TRIGGER update_devices_updated_at
-  BEFORE UPDATE ON public.devices
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 ```
+- RLS: admins gerenciam, recepção visualiza
+- Migrar dados existentes: para cada responsável com `intelbras_person_id` preenchido, inserir um registro vinculando ao dispositivo existente
 
-Migrar o dispositivo atual (da env var) para a tabela via INSERT inicial com os dados atuais.
+### 2. Atualizar cadastro de Responsáveis (`src/pages/Guardians.tsx`)
+- Ao invés de um único campo `intelbras_person_id`, mostrar uma seção com checkboxes/lista dos dispositivos ativos
+- Para cada dispositivo selecionado, permitir informar o `intelbras_person_id` (ou buscar da lista do aparelho)
+- O campo `intelbras_person_id` antigo da tabela `guardians` pode ser mantido como legado mas não mais editado pela UI
 
-### 2. Nova página de Configurações de Dispositivos (`src/pages/Devices.tsx`)
-- Listagem de dispositivos com nome, URL, status (ativo/inativo)
-- Formulário (Dialog) para adicionar/editar: nome, URL, usuário, senha
-- Campo de senha com toggle de visibilidade
-- Botão de testar conexão (chama edge function com as credenciais informadas)
-- Botão de excluir dispositivo
-- Acessível apenas por admins
+### 3. Atualizar Edge Functions
+- **`intelbras-poll`**: ao identificar uma pessoa, buscar na tabela `guardian_devices` pelo `intelbras_person_id` + `device_id` em vez de buscar direto em `guardians`
+- **`intelbras-face`**: ao enviar foto, registrar/atualizar o vínculo em `guardian_devices` para o dispositivo alvo
+- **`intelbras-persons`**: ao listar pessoas, mostrar o status de sincronização por dispositivo
 
-### 3. Rota e navegação
-- Adicionar rota `/devices` em `App.tsx`
-- Adicionar link "Dispositivos" no `AppSidebar.tsx` (apenas para admin)
-
-### 4. Atualizar Edge Functions para ler do banco
-- **`intelbras-poll`**: Receber `deviceId` opcional no body. Buscar credenciais da tabela `devices` via Supabase service role. Se não receber deviceId, iterar todos os dispositivos ativos.
-- **`intelbras-face`**: Receber `deviceId` opcional no body. Buscar credenciais da tabela `devices`. Fallback para env vars se não houver dispositivos na tabela.
-- **`intelbras-persons`**: Receber `deviceId` no body e buscar credenciais da tabela.
-
-### 5. Atualizar ReceptionDashboard
-- Mostrar seletor de dispositivo (se houver mais de um)
-- Passar `deviceId` ao chamar `intelbras-poll`
+### 4. Atualizar ReceptionDashboard
+- O polling já passa `deviceId`; a lógica de matching usará `guardian_devices` para resolver o responsável correto
 
 ## Arquivos impactados
-- **Novo**: `src/pages/Devices.tsx`
-- **Editar**: `src/App.tsx`, `src/components/AppSidebar.tsx`
-- **Editar**: `supabase/functions/intelbras-poll/index.ts`, `supabase/functions/intelbras-face/index.ts`, `supabase/functions/intelbras-persons/index.ts`
-- **Editar**: `src/components/dashboards/ReceptionDashboard.tsx` (seletor de dispositivo)
-- **Migração**: criar tabela `devices`
+- **Migração**: criar tabela `guardian_devices`, migrar dados existentes
+- **Editar**: `src/pages/Guardians.tsx` (UI de vínculo por dispositivo)
+- **Editar**: `supabase/functions/intelbras-poll/index.ts` (lookup via `guardian_devices`)
+- **Editar**: `supabase/functions/intelbras-face/index.ts` (registrar vínculo)
+- **Editar**: `supabase/functions/intelbras-persons/index.ts` (contexto por dispositivo)
 
