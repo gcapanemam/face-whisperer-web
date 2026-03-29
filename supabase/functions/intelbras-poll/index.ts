@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { Md5 } from "https://deno.land/std@0.160.0/hash/md5.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -18,12 +19,8 @@ class DigestAuth {
     this.password = password;
   }
 
-  private async md5(str: string): Promise<string> {
-    const data = new TextEncoder().encode(str);
-    const hash = await crypto.subtle.digest("MD5", data);
-    return Array.from(new Uint8Array(hash))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
+  private md5(str: string): string {
+    return new Md5().update(str).toString();
   }
 
   async authenticate(url: string, method: string = "GET"): Promise<Response> {
