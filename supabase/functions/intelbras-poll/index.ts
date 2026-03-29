@@ -24,14 +24,19 @@ class DigestAuth {
 
   async authenticate(url: string, method: string = "GET"): Promise<Response> {
     const firstResponse = await fetch(url, { method, redirect: "manual" });
+    console.log(`[DigestAuth] First response status: ${firstResponse.status}`);
     if (firstResponse.status !== 401) return firstResponse;
 
     const wwwAuth = firstResponse.headers.get("www-authenticate");
+    console.log(`[DigestAuth] WWW-Authenticate: ${wwwAuth}`);
     if (!wwwAuth) throw new Error("No WWW-Authenticate header");
 
     const realm = wwwAuth.match(/realm="([^"]+)"/)?.[1] || "";
     const nonce = wwwAuth.match(/nonce="([^"]+)"/)?.[1] || "";
     const qop = wwwAuth.match(/qop="([^"]+)"/)?.[1] || "";
+    const algorithm = wwwAuth.match(/algorithm=([^,\s]+)/)?.[1] || "MD5";
+
+    console.log(`[DigestAuth] realm=${realm}, nonce=${nonce}, qop=${qop}, algorithm=${algorithm}`);
 
     this.nc++;
     const ncStr = this.nc.toString(16).padStart(8, "0");
@@ -50,10 +55,14 @@ class DigestAuth {
 
     const authHeader = `Digest username="${this.username}", realm="${realm}", nonce="${nonce}", uri="${uri}", response="${response}"${
       qop ? `, qop=${qop.split(",")[0]}, nc=${ncStr}, cnonce="${cnonce}"` : ""
-    }`;
+    }${algorithm !== "MD5" ? `, algorithm=${algorithm}` : ""}`;
+
+    console.log(`[DigestAuth] Auth header: ${authHeader}`);
 
     await firstResponse.text();
-    return fetch(url, { method, headers: { Authorization: authHeader } });
+    const secondResponse = await fetch(url, { method, headers: { Authorization: authHeader } });
+    console.log(`[DigestAuth] Second response status: ${secondResponse.status}`);
+    return secondResponse;
   }
 }
 
