@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Plus, Trash2, Search, Link, ScanFace, Loader2, RefreshCw, Pencil, Upload, CheckCircle, Monitor } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PhotoUpload } from '@/components/PhotoUpload';
+import { ImportExcel } from '@/components/ImportExcel';
 
 interface IntelbrasPerson {
   userId: string;
