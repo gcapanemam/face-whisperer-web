@@ -61,10 +61,23 @@ export function TeacherDashboard() {
             if (data) {
               setPendingPickups(prev => [data, ...prev]);
               // Play notification sound
+              // Play alert sound
               try {
                 const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbsGczHjmC0teleT4cNoKz4sR3RiEzca3e0IRsTic1d6za0I5kSywqbKXW1J1tVTYkYJvM0KZ+Yks6OGaRwsqliHFUTENdj77JqI13Wk1IYpO+y6uRfGFUTFmMt8msknthVk5fjL3Lr5B7YVdMYY69yq+Re2FXTGCN');
                 audio.volume = 0.5;
                 audio.play().catch(() => {});
+              } catch {}
+              // Speak the notification aloud
+              try {
+                const childName = data.children?.full_name || 'criança';
+                const guardianName = data.guardians?.full_name || 'responsável';
+                const msg = new SpeechSynthesisUtterance(
+                  `Atenção! ${childName}, o responsável ${guardianName} chegou para te buscar.`
+                );
+                msg.lang = 'pt-BR';
+                msg.rate = 0.95;
+                msg.volume = 1;
+                window.speechSynthesis.speak(msg);
               } catch {}
               toast({
                 title: '🔔 Responsável chegou!',
