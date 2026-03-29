@@ -131,7 +131,26 @@ serve(async (req) => {
       }
 
       console.log(`Downloading photo: ${photoUrl}`);
-      const photoResp = await fetch(photoUrl);
+      const optimizedPhotoUrl = (() => {
+        try {
+          const url = new URL(photoUrl);
+          if (url.pathname.includes("/storage/v1/object/public/")) {
+            url.pathname = url.pathname.replace("/storage/v1/object/public/", "/storage/v1/render/image/public/");
+            url.searchParams.set("width", "480");
+            url.searchParams.set("height", "640");
+            url.searchParams.set("resize", "contain");
+            url.searchParams.set("quality", "70");
+            url.searchParams.set("format", "origin");
+            return url.toString();
+          }
+        } catch {
+          // fallback to original URL below
+        }
+        return photoUrl;
+      })();
+
+      console.log(`Downloading optimized photo: ${optimizedPhotoUrl}`);
+      const photoResp = await fetch(optimizedPhotoUrl);
       if (!photoResp.ok) {
         return new Response(JSON.stringify({ error: "Não foi possível baixar a foto" }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -139,6 +158,16 @@ serve(async (req) => {
       }
 
       const photoBytes = new Uint8Array(await photoResp.arrayBuffer());
+      console.log(`Optimized photo size: ${photoBytes.length} bytes`);
+      if (photoBytes.length > 200 * 1024) {
+        return new Response(JSON.stringify({
+          error: "A foto ainda está muito grande para o dispositivo após otimização",
+          size: photoBytes.length,
+        }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       const photoBase64 = base64Encode(photoBytes).replace(/\s/g, "");
 
       const jsonBody = JSON.stringify({
