@@ -15,6 +15,7 @@ import Reports from "./pages/Reports";
 import Monitoring from "./pages/Monitoring";
 import Notifications from "./pages/Notifications";
 import Devices from "./pages/Devices";
+import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
