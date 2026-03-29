@@ -14,16 +14,330 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      children: {
+        Row: {
+          birth_date: string | null
+          classroom_id: string | null
+          created_at: string
+          full_name: string
+          id: string
+          notes: string | null
+          photo_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          birth_date?: string | null
+          classroom_id?: string | null
+          created_at?: string
+          full_name: string
+          id?: string
+          notes?: string | null
+          photo_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          birth_date?: string | null
+          classroom_id?: string | null
+          created_at?: string
+          full_name?: string
+          id?: string
+          notes?: string | null
+          photo_url?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "children_classroom_id_fkey"
+            columns: ["classroom_id"]
+            isOneToOne: false
+            referencedRelation: "classrooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      classrooms: {
+        Row: {
+          created_at: string
+          grade: string | null
+          id: string
+          name: string
+          teacher_user_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          grade?: string | null
+          id?: string
+          name: string
+          teacher_user_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          grade?: string | null
+          id?: string
+          name?: string
+          teacher_user_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      guardian_children: {
+        Row: {
+          authorized: boolean
+          child_id: string
+          created_at: string
+          guardian_id: string
+          id: string
+          relationship: string
+        }
+        Insert: {
+          authorized?: boolean
+          child_id: string
+          created_at?: string
+          guardian_id: string
+          id?: string
+          relationship?: string
+        }
+        Update: {
+          authorized?: boolean
+          child_id?: string
+          created_at?: string
+          guardian_id?: string
+          id?: string
+          relationship?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guardian_children_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guardian_children_guardian_id_fkey"
+            columns: ["guardian_id"]
+            isOneToOne: false
+            referencedRelation: "guardians"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      guardians: {
+        Row: {
+          cpf: string | null
+          created_at: string
+          email: string | null
+          full_name: string
+          id: string
+          intelbras_person_id: string | null
+          phone: string | null
+          photo_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          cpf?: string | null
+          created_at?: string
+          email?: string | null
+          full_name: string
+          id?: string
+          intelbras_person_id?: string | null
+          phone?: string | null
+          photo_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cpf?: string | null
+          created_at?: string
+          email?: string | null
+          full_name?: string
+          id?: string
+          intelbras_person_id?: string | null
+          phone?: string | null
+          photo_url?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      pickup_events: {
+        Row: {
+          child_id: string | null
+          classroom_id: string | null
+          confirmed_at: string | null
+          confirmed_by: string | null
+          created_at: string
+          guardian_id: string | null
+          id: string
+          intelbras_event_id: string | null
+          notes: string | null
+          recognized_at: string
+          status: string
+        }
+        Insert: {
+          child_id?: string | null
+          classroom_id?: string | null
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          created_at?: string
+          guardian_id?: string | null
+          id?: string
+          intelbras_event_id?: string | null
+          notes?: string | null
+          recognized_at?: string
+          status?: string
+        }
+        Update: {
+          child_id?: string | null
+          classroom_id?: string | null
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          created_at?: string
+          guardian_id?: string | null
+          id?: string
+          intelbras_event_id?: string | null
+          notes?: string | null
+          recognized_at?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pickup_events_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pickup_events_classroom_id_fkey"
+            columns: ["classroom_id"]
+            isOneToOne: false
+            referencedRelation: "classrooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pickup_events_guardian_id_fkey"
+            columns: ["guardian_id"]
+            isOneToOne: false
+            referencedRelation: "guardians"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          email: string | null
+          full_name: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string | null
+          full_name: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string | null
+          full_name?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      recognition_log: {
+        Row: {
+          confidence: number | null
+          created_at: string
+          guardian_id: string | null
+          id: string
+          intelbras_event_id: string | null
+          intelbras_person_id: string | null
+          photo_url: string | null
+          raw_data: Json | null
+          recognized: boolean
+        }
+        Insert: {
+          confidence?: number | null
+          created_at?: string
+          guardian_id?: string | null
+          id?: string
+          intelbras_event_id?: string | null
+          intelbras_person_id?: string | null
+          photo_url?: string | null
+          raw_data?: Json | null
+          recognized?: boolean
+        }
+        Update: {
+          confidence?: number | null
+          created_at?: string
+          guardian_id?: string | null
+          id?: string
+          intelbras_event_id?: string | null
+          intelbras_person_id?: string | null
+          photo_url?: string | null
+          raw_data?: Json | null
+          recognized?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recognition_log_guardian_id_fkey"
+            columns: ["guardian_id"]
+            isOneToOne: false
+            referencedRelation: "guardians"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_user_role: {
+        Args: { _user_id: string }
+        Returns: Database["public"]["Enums"]["app_role"]
+      }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "secretary" | "teacher" | "reception"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +464,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "secretary", "teacher", "reception"],
+    },
   },
 } as const
