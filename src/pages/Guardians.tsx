@@ -122,7 +122,7 @@ export default function Guardians() {
     }
   };
 
-  const handleGetFaceFromDevice = async () => {
+  const handleCheckFaceOnDevice = async () => {
     if (!intelbrasPersonId) {
       toast({ title: 'Informe o ID da pessoa no dispositivo', variant: 'destructive' });
       return;
@@ -130,17 +130,16 @@ export default function Guardians() {
     setSyncingFace(true);
     try {
       const { data, error } = await supabase.functions.invoke('intelbras-face', {
-        body: { action: 'get', personId: intelbrasPersonId },
+        body: { action: 'check', personId: intelbrasPersonId },
       });
       if (error) throw error;
-      if (data?.success && data?.photo) {
-        setPhotoUrl(data.photo);
-        toast({ title: 'Foto recebida do dispositivo!' });
+      if (data?.hasFace) {
+        toast({ title: '✅ Face cadastrada no dispositivo', description: `${data.total} face(s) encontrada(s)` });
       } else {
-        toast({ title: 'Foto não encontrada no dispositivo', description: data?.error, variant: 'destructive' });
+        toast({ title: 'Nenhuma face cadastrada no dispositivo para este ID', variant: 'destructive' });
       }
     } catch (err: any) {
-      toast({ title: 'Erro ao buscar foto', description: err.message, variant: 'destructive' });
+      toast({ title: 'Erro ao verificar face', description: err.message, variant: 'destructive' });
     } finally {
       setSyncingFace(false);
     }
