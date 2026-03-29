@@ -8,8 +8,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Plus, Trash2, Search, Link, ScanFace, Loader2, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { PhotoUpload } from '@/components/PhotoUpload';
 
 interface IntelbrasPerson {
   userId: string;
@@ -26,6 +28,7 @@ export default function Guardians() {
   const [cpf, setCpf] = useState('');
   const [email, setEmail] = useState('');
   const [intelbrasPersonId, setIntelbrasPersonId] = useState('');
+  const [photoUrl, setPhotoUrl] = useState('');
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
@@ -79,6 +82,7 @@ export default function Guardians() {
       phone: phone || null,
       cpf: cpf || null,
       email: email || null,
+      photo_url: photoUrl || null,
       intelbras_person_id: intelbrasPersonId || null,
     }).select().single();
 
@@ -94,7 +98,7 @@ export default function Guardians() {
     }
 
     toast({ title: 'Responsável cadastrado!' });
-    setName(''); setPhone(''); setCpf(''); setEmail(''); setIntelbrasPersonId(''); setSelectedChildren([]);
+    setName(''); setPhone(''); setCpf(''); setEmail(''); setIntelbrasPersonId(''); setPhotoUrl(''); setSelectedChildren([]);
     setOpen(false);
     fetchData();
   };
@@ -134,6 +138,16 @@ export default function Guardians() {
           <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
             <DialogHeader><DialogTitle>Cadastrar Responsável</DialogTitle></DialogHeader>
             <div className="space-y-4">
+              {/* Photo Upload */}
+              <div className="space-y-2">
+                <Label>Foto</Label>
+                <PhotoUpload
+                  folder="guardians"
+                  onUploaded={setPhotoUrl}
+                  name={name}
+                  currentUrl={photoUrl || null}
+                />
+              </div>
               {/* Intelbras Person ID */}
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
@@ -300,6 +314,7 @@ export default function Guardians() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-12"></TableHead>
                 <TableHead>Nome</TableHead>
                 <TableHead>Telefone</TableHead>
                 <TableHead>CPF</TableHead>
@@ -310,6 +325,14 @@ export default function Guardians() {
             <TableBody>
               {filtered.map(g => (
                 <TableRow key={g.id}>
+                  <TableCell>
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src={g.photo_url || undefined} />
+                      <AvatarFallback className="text-xs bg-secondary">
+                        {g.full_name[0]}
+                      </AvatarFallback>
+                    </Avatar>
+                  </TableCell>
                   <TableCell className="font-medium">{g.full_name}</TableCell>
                   <TableCell>{g.phone || '—'}</TableCell>
                   <TableCell>{g.cpf || '—'}</TableCell>
@@ -340,7 +363,7 @@ export default function Guardians() {
               ))}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                     Nenhum responsável encontrado.
                   </TableCell>
                 </TableRow>
