@@ -11,6 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Plus, Trash2, Search, Pencil } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PhotoUpload } from '@/components/PhotoUpload';
+import { ImportExcel } from '@/components/ImportExcel';
 
 export default function Children() {
   const [children, setChildren] = useState<any[]>([]);
@@ -88,6 +89,29 @@ export default function Children() {
           <h1 className="font-display text-2xl font-bold">Crianças</h1>
           <p className="text-muted-foreground">{children.length} cadastradas</p>
         </div>
+        <div className="flex gap-2">
+        <ImportExcel
+          buttonLabel="Importar Crianças"
+          fields={[
+            { dbField: 'full_name', label: 'Nome', required: true },
+            { dbField: 'classroom', label: 'Sala' },
+          ]}
+          onImport={async (rows) => {
+            let success = 0, errors = 0;
+            for (const row of rows) {
+              if (!row.full_name) { errors++; continue; }
+              let classroom_id: string | null = null;
+              if (row.classroom) {
+                const match = classrooms.find(c => c.name.toLowerCase() === row.classroom.toLowerCase());
+                if (match) classroom_id = match.id;
+              }
+              const { error } = await supabase.from('children').insert({ full_name: row.full_name, classroom_id });
+              if (error) errors++; else success++;
+            }
+            fetchData();
+            return { success, errors };
+          }}
+        />
         <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetForm(); }}>
           <DialogTrigger asChild>
             <Button><Plus className="h-4 w-4 mr-1" /> Nova Criança</Button>
@@ -123,6 +147,7 @@ export default function Children() {
             </div>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       <div className="relative">
