@@ -208,6 +208,7 @@ async function pollDevice(device: DeviceConfig, supabase: any, testOnly: boolean
       recognized,
       confidence: confidence || null,
       raw_data: event,
+      device_id: device.id === "env" ? null : device.id,
     });
     processedCount++;
 
