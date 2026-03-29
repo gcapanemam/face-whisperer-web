@@ -9,7 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Plus, Trash2, Search, Link, ScanFace, Loader2, RefreshCw, Pencil, Upload, CheckCircle } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Plus, Trash2, Search, Link, ScanFace, Loader2, RefreshCw, Pencil, Upload, CheckCircle, Monitor } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PhotoUpload } from '@/components/PhotoUpload';
 
@@ -19,17 +20,24 @@ interface IntelbrasPerson {
   cardNo: string;
 }
 
+interface DeviceLink {
+  device_id: string;
+  intelbras_person_id: string;
+  synced: boolean;
+}
+
 export default function Guardians() {
   const [guardians, setGuardians] = useState<any[]>([]);
   const [children, setChildren] = useState<any[]>([]);
+  const [devices, setDevices] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [cpf, setCpf] = useState('');
   const [email, setEmail] = useState('');
-  const [intelbrasPersonId, setIntelbrasPersonId] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
+  const [deviceLinks, setDeviceLinks] = useState<DeviceLink[]>([]);
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [linkOpen, setLinkOpen] = useState(false);
@@ -39,23 +47,39 @@ export default function Guardians() {
   const [intelbrasPersons, setIntelbrasPersons] = useState<IntelbrasPerson[]>([]);
   const [loadingPersons, setLoadingPersons] = useState(false);
   const [personsOpen, setPersonsOpen] = useState(false);
+  const [personsDeviceId, setPersonsDeviceId] = useState<string>('');
+  const [activeDeviceLinkIndex, setActiveDeviceLinkIndex] = useState<number>(0);
   const [syncingFace, setSyncingFace] = useState(false);
+
+  // Guardian devices map for display
+  const [guardianDevicesMap, setGuardianDevicesMap] = useState<Record<string, DeviceLink[]>>({});
 
   const { toast } = useToast();
 
   const fetchData = async () => {
-    const [{ data: g }, { data: c }] = await Promise.all([
+    const [{ data: g }, { data: c }, { data: d }, { data: gd }] = await Promise.all([
       supabase.from('guardians').select('*').order('full_name'),
       supabase.from('children').select('id, full_name, classrooms(name)').order('full_name'),
+      supabase.from('devices').select('id, name, enabled').eq('enabled', true).order('name'),
+      supabase.from('guardian_devices').select('*'),
     ]);
     setGuardians(g || []);
     setChildren(c || []);
+    setDevices(d || []);
+
+    // Build map guardian_id -> device links
+    const map: Record<string, DeviceLink[]> = {};
+    for (const link of (gd || [])) {
+      if (!map[link.guardian_id]) map[link.guardian_id] = [];
+      map[link.guardian_id].push({ device_id: link.device_id, intelbras_person_id: link.intelbras_person_id, synced: link.synced });
+    }
+    setGuardianDevicesMap(map);
   };
 
   useEffect(() => { fetchData(); }, []);
 
   const resetForm = () => {
-    setName(''); setPhone(''); setCpf(''); setEmail(''); setIntelbrasPersonId(''); setPhotoUrl(''); setSelectedChildren([]); setEditId(null);
+    setName(''); setPhone(''); setCpf(''); setEmail(''); setPhotoUrl(''); setSelectedChildren([]); setDeviceLinks([]); setEditId(null);
   };
 
   const openEdit = async (g: any) => {
@@ -64,20 +88,42 @@ export default function Guardians() {
     setPhone(g.phone || '');
     setCpf(g.cpf || '');
     setEmail(g.email || '');
-    setIntelbrasPersonId(g.intelbras_person_id || '');
     setPhotoUrl(g.photo_url || '');
-    // Load linked children
-    const { data } = await supabase.from('guardian_children').select('child_id').eq('guardian_id', g.id);
-    setSelectedChildren((data || []).map(r => r.child_id));
+    const [{ data: childLinks }, { data: devLinks }] = await Promise.all([
+      supabase.from('guardian_children').select('child_id').eq('guardian_id', g.id),
+      supabase.from('guardian_devices').select('device_id, intelbras_person_id, synced').eq('guardian_id', g.id),
+    ]);
+    setSelectedChildren((childLinks || []).map(r => r.child_id));
+    setDeviceLinks((devLinks || []).map(r => ({ device_id: r.device_id, intelbras_person_id: r.intelbras_person_id, synced: r.synced })));
     setOpen(true);
   };
 
-  const fetchIntelbrasPersons = async () => {
+  const addDeviceLink = () => {
+    const unlinked = devices.filter(d => !deviceLinks.some(l => l.device_id === d.id));
+    if (unlinked.length === 0) {
+      toast({ title: 'Todos os dispositivos já estão vinculados' });
+      return;
+    }
+    setDeviceLinks([...deviceLinks, { device_id: unlinked[0].id, intelbras_person_id: '', synced: false }]);
+  };
+
+  const removeDeviceLink = (index: number) => {
+    setDeviceLinks(deviceLinks.filter((_, i) => i !== index));
+  };
+
+  const updateDeviceLink = (index: number, field: keyof DeviceLink, value: string) => {
+    const updated = [...deviceLinks];
+    (updated[index] as any)[field] = value;
+    setDeviceLinks(updated);
+  };
+
+  const fetchIntelbrasPersons = async (deviceId: string) => {
     setLoadingPersons(true);
     try {
-      const { data, error } = await supabase.functions.invoke('intelbras-persons', { method: 'POST' });
+      const { data, error } = await supabase.functions.invoke('intelbras-persons', { body: { deviceId } });
       if (error) throw error;
       setIntelbrasPersons(data?.persons || []);
+      setPersonsDeviceId(deviceId);
       if (data?.persons?.length === 0) {
         toast({ title: 'Nenhuma pessoa encontrada no dispositivo' });
       }
@@ -89,14 +135,16 @@ export default function Guardians() {
   };
 
   const handleSelectIntelbrasPerson = (person: IntelbrasPerson) => {
-    setIntelbrasPersonId(person.userId);
+    const updated = [...deviceLinks];
+    updated[activeDeviceLinkIndex].intelbras_person_id = person.userId;
+    setDeviceLinks(updated);
     if (person.name && !name) setName(person.name);
     setPersonsOpen(false);
     toast({ title: `Pessoa "${person.userId}" selecionada` });
   };
 
-  const handleSendFaceToDevice = async () => {
-    if (!intelbrasPersonId) {
+  const handleSendFaceToDevice = async (link: DeviceLink) => {
+    if (!link.intelbras_person_id) {
       toast({ title: 'Informe o ID da pessoa no dispositivo', variant: 'destructive' });
       return;
     }
@@ -107,7 +155,7 @@ export default function Guardians() {
     setSyncingFace(true);
     try {
       const { data, error } = await supabase.functions.invoke('intelbras-face', {
-        body: { action: 'set', personId: intelbrasPersonId, photoUrl },
+        body: { action: 'set', personId: link.intelbras_person_id, photoUrl, deviceId: link.device_id },
       });
       if (error) throw error;
       if (data?.success) {
@@ -122,15 +170,15 @@ export default function Guardians() {
     }
   };
 
-  const handleCheckFaceOnDevice = async () => {
-    if (!intelbrasPersonId) {
+  const handleCheckFaceOnDevice = async (link: DeviceLink) => {
+    if (!link.intelbras_person_id) {
       toast({ title: 'Informe o ID da pessoa no dispositivo', variant: 'destructive' });
       return;
     }
     setSyncingFace(true);
     try {
       const { data, error } = await supabase.functions.invoke('intelbras-face', {
-        body: { action: 'check', personId: intelbrasPersonId },
+        body: { action: 'check', personId: link.intelbras_person_id, deviceId: link.device_id },
       });
       if (error) throw error;
       if (data?.hasFace) {
@@ -153,7 +201,7 @@ export default function Guardians() {
         cpf: cpf || null,
         email: email || null,
         photo_url: photoUrl || null,
-        intelbras_person_id: intelbrasPersonId || null,
+        intelbras_person_id: deviceLinks.length > 0 ? deviceLinks[0].intelbras_person_id : null,
       }).eq('id', editId);
       if (error) {
         toast({ title: 'Erro', description: error.message, variant: 'destructive' });
@@ -166,6 +214,14 @@ export default function Guardians() {
           selectedChildren.map(childId => ({ guardian_id: editId, child_id: childId }))
         );
       }
+      // Update device links
+      await supabase.from('guardian_devices').delete().eq('guardian_id', editId);
+      const validLinks = deviceLinks.filter(l => l.intelbras_person_id);
+      if (validLinks.length > 0) {
+        await supabase.from('guardian_devices').insert(
+          validLinks.map(l => ({ guardian_id: editId, device_id: l.device_id, intelbras_person_id: l.intelbras_person_id, synced: l.synced }))
+        );
+      }
       toast({ title: 'Responsável atualizado!' });
       resetForm(); setOpen(false); fetchData();
     } else {
@@ -175,7 +231,7 @@ export default function Guardians() {
         cpf: cpf || null,
         email: email || null,
         photo_url: photoUrl || null,
-        intelbras_person_id: intelbrasPersonId || null,
+        intelbras_person_id: deviceLinks.length > 0 ? deviceLinks[0].intelbras_person_id : null,
       }).select().single();
 
       if (error) {
@@ -186,6 +242,14 @@ export default function Guardians() {
       if (selectedChildren.length > 0 && data) {
         await supabase.from('guardian_children').insert(
           selectedChildren.map(childId => ({ guardian_id: data.id, child_id: childId }))
+        );
+      }
+
+      // Insert device links
+      const validLinks = deviceLinks.filter(l => l.intelbras_person_id);
+      if (validLinks.length > 0 && data) {
+        await supabase.from('guardian_devices').insert(
+          validLinks.map(l => ({ guardian_id: data.id, device_id: l.device_id, intelbras_person_id: l.intelbras_person_id, synced: l.synced }))
         );
       }
 
@@ -211,7 +275,7 @@ export default function Guardians() {
   };
 
   const filtered = guardians.filter(g => g.full_name.toLowerCase().includes(search.toLowerCase()));
-  const usedIntelbrasIds = guardians.filter(g => !editId || g.id !== editId).map(g => g.intelbras_person_id).filter(Boolean);
+  const getDeviceName = (deviceId: string) => devices.find(d => d.id === deviceId)?.name || 'Dispositivo';
 
   return (
     <div className="space-y-6">
@@ -231,35 +295,74 @@ export default function Guardians() {
                 <Label>Foto</Label>
                 <PhotoUpload folder="guardians" onUploaded={setPhotoUrl} name={name} currentUrl={photoUrl || null} />
               </div>
+
+              {/* Device links section */}
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
-                  <ScanFace className="h-4 w-4 text-primary" />
-                  Pessoa no Dispositivo Intelbras
+                  <Monitor className="h-4 w-4 text-primary" />
+                  Dispositivos Intelbras
                 </Label>
-                <div className="flex gap-2">
-                  <Input value={intelbrasPersonId} onChange={e => setIntelbrasPersonId(e.target.value)} placeholder="ID da pessoa (ex: 01)" className="flex-1" />
-                  <Button type="button" variant="outline" onClick={() => { setPersonsOpen(true); if (intelbrasPersons.length === 0) fetchIntelbrasPersons(); }}>
-                    <ScanFace className="h-4 w-4 mr-1" /> Buscar
-                  </Button>
-                </div>
-                {intelbrasPersonId && (
-                  <div className="space-y-2 mt-1">
-                    <Badge variant="secondary">
-                      <ScanFace className="h-3 w-3 mr-1" /> Vinculado: {intelbrasPersonId}
-                    </Badge>
-                    <div className="flex gap-2">
-                      <Button type="button" variant="outline" size="sm" onClick={handleSendFaceToDevice} disabled={syncingFace || !photoUrl}>
-                        {syncingFace ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Upload className="h-3 w-3 mr-1" />}
-                        Enviar foto ao dispositivo
-                      </Button>
-                      <Button type="button" variant="outline" size="sm" onClick={handleCheckFaceOnDevice} disabled={syncingFace}>
-                        {syncingFace ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <CheckCircle className="h-3 w-3 mr-1" />}
-                        Verificar face no dispositivo
+                {deviceLinks.map((link, index) => (
+                  <div key={index} className="rounded-lg border p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Select value={link.device_id} onValueChange={(v) => updateDeviceLink(index, 'device_id', v)}>
+                        <SelectTrigger className="w-[200px]">
+                          <SelectValue placeholder="Dispositivo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {devices.map(d => (
+                            <SelectItem key={d.id} value={d.id} disabled={deviceLinks.some((l, i) => i !== index && l.device_id === d.id)}>
+                              {d.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button type="button" variant="ghost" size="icon" onClick={() => removeDeviceLink(index)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </div>
+                    <div className="flex gap-2">
+                      <Input
+                        value={link.intelbras_person_id}
+                        onChange={e => updateDeviceLink(index, 'intelbras_person_id', e.target.value)}
+                        placeholder="ID da pessoa (ex: 01)"
+                        className="flex-1"
+                      />
+                      <Button type="button" variant="outline" size="sm" onClick={() => {
+                        setActiveDeviceLinkIndex(index);
+                        setPersonsOpen(true);
+                        fetchIntelbrasPersons(link.device_id);
+                      }}>
+                        <ScanFace className="h-4 w-4 mr-1" /> Buscar
+                      </Button>
+                    </div>
+                    {link.intelbras_person_id && (
+                      <div className="flex gap-2 flex-wrap">
+                        <Badge variant="secondary" className="gap-1">
+                          <ScanFace className="h-3 w-3" /> {link.intelbras_person_id}
+                        </Badge>
+                        <Button type="button" variant="outline" size="sm" onClick={() => handleSendFaceToDevice(link)} disabled={syncingFace || !photoUrl}>
+                          {syncingFace ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Upload className="h-3 w-3 mr-1" />}
+                          Enviar foto
+                        </Button>
+                        <Button type="button" variant="outline" size="sm" onClick={() => handleCheckFaceOnDevice(link)} disabled={syncingFace}>
+                          {syncingFace ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <CheckCircle className="h-3 w-3 mr-1" />}
+                          Verificar
+                        </Button>
+                      </div>
+                    )}
                   </div>
+                ))}
+                {devices.length > deviceLinks.length && (
+                  <Button type="button" variant="outline" size="sm" onClick={addDeviceLink} className="w-full">
+                    <Plus className="h-4 w-4 mr-1" /> Vincular dispositivo
+                  </Button>
+                )}
+                {devices.length === 0 && (
+                  <p className="text-sm text-muted-foreground">Nenhum dispositivo cadastrado.</p>
                 )}
               </div>
+
               <div className="space-y-2">
                 <Label>Nome Completo</Label>
                 <Input value={name} onChange={e => setName(e.target.value)} placeholder="Nome completo" />
@@ -307,11 +410,11 @@ export default function Guardians() {
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <ScanFace className="h-5 w-5 text-primary" /> Pessoas no Dispositivo Intelbras
+              <ScanFace className="h-5 w-5 text-primary" /> Pessoas no Dispositivo
             </DialogTitle>
           </DialogHeader>
           <div className="flex justify-end">
-            <Button variant="outline" size="sm" onClick={fetchIntelbrasPersons} disabled={loadingPersons}>
+            <Button variant="outline" size="sm" onClick={() => fetchIntelbrasPersons(personsDeviceId)} disabled={loadingPersons}>
               <RefreshCw className={`h-4 w-4 mr-1 ${loadingPersons ? 'animate-spin' : ''}`} /> Atualizar
             </Button>
           </div>
@@ -324,23 +427,20 @@ export default function Guardians() {
             <p className="text-center text-muted-foreground py-8">Nenhuma pessoa encontrada no dispositivo.</p>
           ) : (
             <div className="max-h-60 overflow-y-auto space-y-2">
-              {intelbrasPersons.map((person, i) => {
-                const isUsed = usedIntelbrasIds.includes(person.userId);
-                return (
-                  <div key={`${person.userId}-${i}`} className={`flex items-center justify-between rounded-lg border p-3 ${isUsed ? 'opacity-50' : 'cursor-pointer hover:bg-secondary transition-colors'}`} onClick={() => !isUsed && handleSelectIntelbrasPerson(person)}>
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-                        <ScanFace className="h-5 w-5 text-primary" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-sm">ID: {person.userId}{person.name && ` — ${person.name}`}</p>
-                        {person.cardNo && <p className="text-xs text-muted-foreground">Cartão: {person.cardNo}</p>}
-                      </div>
+              {intelbrasPersons.map((person, i) => (
+                <div key={`${person.userId}-${i}`} className="flex items-center justify-between rounded-lg border p-3 cursor-pointer hover:bg-secondary transition-colors" onClick={() => handleSelectIntelbrasPerson(person)}>
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                      <ScanFace className="h-5 w-5 text-primary" />
                     </div>
-                    {isUsed ? <Badge variant="secondary">Já vinculado</Badge> : <Badge variant="outline" className="text-primary border-primary">Selecionar</Badge>}
+                    <div>
+                      <p className="font-medium text-sm">ID: {person.userId}{person.name && ` — ${person.name}`}</p>
+                      {person.cardNo && <p className="text-xs text-muted-foreground">Cartão: {person.cardNo}</p>}
+                    </div>
                   </div>
-                );
-              })}
+                  <Badge variant="outline" className="text-primary border-primary">Selecionar</Badge>
+                </div>
+              ))}
             </div>
           )}
         </DialogContent>
@@ -370,42 +470,51 @@ export default function Guardians() {
                 <TableHead>Nome</TableHead>
                 <TableHead>Telefone</TableHead>
                 <TableHead>CPF</TableHead>
-                <TableHead>Intelbras</TableHead>
+                <TableHead>Dispositivos</TableHead>
                 <TableHead className="w-28">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map(g => (
-                <TableRow key={g.id}>
-                  <TableCell>
-                    <Avatar className="h-8 w-8">
-                      <AvatarImage src={g.photo_url || undefined} />
-                      <AvatarFallback className="text-xs bg-secondary">{g.full_name[0]}</AvatarFallback>
-                    </Avatar>
-                  </TableCell>
-                  <TableCell className="font-medium">{g.full_name}</TableCell>
-                  <TableCell>{g.phone || '—'}</TableCell>
-                  <TableCell>{g.cpf || '—'}</TableCell>
-                  <TableCell>
-                    {g.intelbras_person_id ? (
-                      <Badge variant="secondary" className="gap-1"><ScanFace className="h-3 w-3" /> {g.intelbras_person_id}</Badge>
-                    ) : <span className="text-muted-foreground text-sm">—</span>}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => openEdit(g)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => { setLinkGuardianId(g.id); setLinkChildren([]); setLinkOpen(true); }}>
-                        <Link className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(g.id)}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {filtered.map(g => {
+                const links = guardianDevicesMap[g.id] || [];
+                return (
+                  <TableRow key={g.id}>
+                    <TableCell>
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage src={g.photo_url || undefined} />
+                        <AvatarFallback className="text-xs bg-secondary">{g.full_name[0]}</AvatarFallback>
+                      </Avatar>
+                    </TableCell>
+                    <TableCell className="font-medium">{g.full_name}</TableCell>
+                    <TableCell>{g.phone || '—'}</TableCell>
+                    <TableCell>{g.cpf || '—'}</TableCell>
+                    <TableCell>
+                      {links.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {links.map((l, i) => (
+                            <Badge key={i} variant="secondary" className="gap-1 text-xs">
+                              <Monitor className="h-3 w-3" /> {getDeviceName(l.device_id)}: {l.intelbras_person_id}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : <span className="text-muted-foreground text-sm">—</span>}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => openEdit(g)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => { setLinkGuardianId(g.id); setLinkChildren([]); setLinkOpen(true); }}>
+                          <Link className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleDelete(g.id)}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
               {filtered.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhum responsável encontrado.</TableCell>

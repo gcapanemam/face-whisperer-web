@@ -72,22 +72,16 @@ async function getDevices(supabase: any, deviceId?: string): Promise<DeviceConfi
       .select("id, device_url, username, password, name")
       .eq("id", deviceId)
       .single();
-    if (error || !data) {
-      // Fallback to env vars
-      return getFallbackDevice();
-    }
+    if (error || !data) return getFallbackDevice();
     return [data];
   }
 
-  // Get all enabled devices
   const { data, error } = await supabase
     .from("devices")
     .select("id, device_url, username, password, name")
     .eq("enabled", true);
 
   if (data && data.length > 0) return data;
-
-  // Fallback to env vars
   return getFallbackDevice();
 }
 
@@ -150,7 +144,6 @@ async function pollDevice(device: DeviceConfig, supabase: any, testOnly: boolean
     return { deviceId: device.id, deviceName: device.name, deviceStatus, debugInfo };
   }
 
-  // Process events
   let processedCount = 0;
   let pickupEventsCreated = 0;
 
@@ -167,16 +160,30 @@ async function pollDevice(device: DeviceConfig, supabase: any, testOnly: boolean
       .single();
     if (existing) continue;
 
+    // Look up guardian via guardian_devices table (device-specific)
     let guardianId: string | null = null;
     let recognized = false;
     if (personId) {
-      const { data: guardian } = await supabase
-        .from("guardians")
-        .select("id")
+      const { data: gdLink } = await supabase
+        .from("guardian_devices")
+        .select("guardian_id")
         .eq("intelbras_person_id", personId)
+        .eq("device_id", device.id)
         .limit(1)
         .single();
-      if (guardian) { guardianId = guardian.id; recognized = true; }
+      if (gdLink) {
+        guardianId = gdLink.guardian_id;
+        recognized = true;
+      } else {
+        // Fallback: check guardians table directly (legacy)
+        const { data: guardian } = await supabase
+          .from("guardians")
+          .select("id")
+          .eq("intelbras_person_id", personId)
+          .limit(1)
+          .single();
+        if (guardian) { guardianId = guardian.id; recognized = true; }
+      }
     }
 
     await supabase.from("recognition_log").insert({
@@ -261,7 +268,6 @@ serve(async (req) => {
       }
     }
 
-    // Aggregate status
     const anyOnline = results.some(r => r.deviceStatus === "online");
     return new Response(JSON.stringify({
       success: true,

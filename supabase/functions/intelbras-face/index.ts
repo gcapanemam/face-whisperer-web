@@ -157,6 +157,26 @@ serve(async (req) => {
         });
       }
 
+      // After successful upload, upsert guardian_devices link
+      const upsertGuardianDevice = async () => {
+        if (!deviceId || config.id === "env") return;
+        // Find guardian by intelbras_person_id
+        const { data: guardian } = await supabase
+          .from("guardians")
+          .select("id")
+          .eq("intelbras_person_id", personId)
+          .limit(1)
+          .single();
+        if (guardian) {
+          await supabase.from("guardian_devices").upsert({
+            guardian_id: guardian.id,
+            device_id: config.id,
+            intelbras_person_id: personId,
+            synced: true,
+          }, { onConflict: "guardian_id,device_id" });
+        }
+      };
+
       const optimizedPhotoUrl = (() => {
         try {
           const url = new URL(photoUrl);
@@ -208,6 +228,7 @@ serve(async (req) => {
       const jsonText = await jsonResp.text();
 
       if (jsonResp.ok && !jsonText.toLowerCase().includes("error") && !jsonText.toLowerCase().includes("batch process error")) {
+        await upsertGuardianDevice();
         return new Response(JSON.stringify({
           success: true, message: hasExistingFace ? "Foto atualizada no dispositivo!" : "Foto enviada ao dispositivo!",
         }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -221,6 +242,7 @@ serve(async (req) => {
       const formText = await formResp.text();
 
       if (formResp.ok && !formText.toLowerCase().includes("error") && !formText.toLowerCase().includes("batch process error")) {
+        await upsertGuardianDevice();
         return new Response(JSON.stringify({
           success: true, message: hasExistingFace ? "Foto atualizada no dispositivo!" : "Foto enviada ao dispositivo!",
         }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
