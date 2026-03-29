@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, School, Trash2 } from 'lucide-react';
+import { Plus, School, Trash2, Pencil } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export default function Classrooms() {
@@ -16,11 +16,11 @@ export default function Classrooms() {
   const [grade, setGrade] = useState('');
   const [teacherId, setTeacherId] = useState('');
   const [open, setOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const fetchData = async () => {
     const { data } = await supabase.from('classrooms').select('*').order('name');
-    // Fetch teacher names separately
     const teacherIds = (data || []).map(c => c.teacher_user_id).filter(Boolean);
     if (teacherIds.length > 0) {
       const { data: profs } = await supabase.from('profiles').select('user_id, full_name').in('user_id', teacherIds);
@@ -41,18 +41,43 @@ export default function Classrooms() {
 
   useEffect(() => { fetchData(); }, []);
 
-  const handleCreate = async () => {
-    const { error } = await supabase.from('classrooms').insert({
-      name,
-      grade: grade || null,
-      teacher_user_id: teacherId || null,
-    });
-    if (error) {
-      toast({ title: 'Erro', description: error.message, variant: 'destructive' });
+  const resetForm = () => {
+    setName(''); setGrade(''); setTeacherId(''); setEditId(null);
+  };
+
+  const openEdit = (room: any) => {
+    setEditId(room.id);
+    setName(room.name);
+    setGrade(room.grade || '');
+    setTeacherId(room.teacher_user_id || '');
+    setOpen(true);
+  };
+
+  const handleSave = async () => {
+    if (editId) {
+      const { error } = await supabase.from('classrooms').update({
+        name,
+        grade: grade || null,
+        teacher_user_id: teacherId || null,
+      }).eq('id', editId);
+      if (error) {
+        toast({ title: 'Erro', description: error.message, variant: 'destructive' });
+      } else {
+        toast({ title: 'Sala atualizada!' });
+        resetForm(); setOpen(false); fetchData();
+      }
     } else {
-      toast({ title: 'Sala criada!' });
-      setName(''); setGrade(''); setTeacherId(''); setOpen(false);
-      fetchData();
+      const { error } = await supabase.from('classrooms').insert({
+        name,
+        grade: grade || null,
+        teacher_user_id: teacherId || null,
+      });
+      if (error) {
+        toast({ title: 'Erro', description: error.message, variant: 'destructive' });
+      } else {
+        toast({ title: 'Sala criada!' });
+        resetForm(); setOpen(false); fetchData();
+      }
     }
   };
 
@@ -68,12 +93,12 @@ export default function Classrooms() {
           <h1 className="font-display text-2xl font-bold">Salas</h1>
           <p className="text-muted-foreground">Gerenciar salas e turmas</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetForm(); }}>
           <DialogTrigger asChild>
             <Button><Plus className="h-4 w-4 mr-1" /> Nova Sala</Button>
           </DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>Nova Sala</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>{editId ? 'Editar Sala' : 'Nova Sala'}</DialogTitle></DialogHeader>
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label>Nome da Sala</Label>
@@ -94,7 +119,7 @@ export default function Classrooms() {
                   </SelectContent>
                 </Select>
               </div>
-              <Button onClick={handleCreate} className="w-full">Criar Sala</Button>
+              <Button onClick={handleSave} className="w-full">{editId ? 'Salvar' : 'Criar Sala'}</Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -108,9 +133,14 @@ export default function Classrooms() {
                 <School className="h-5 w-5 text-primary" />
                 <CardTitle className="text-base">{room.name}</CardTitle>
               </div>
-              <Button variant="ghost" size="icon" onClick={() => handleDelete(room.id)}>
-                <Trash2 className="h-4 w-4 text-destructive" />
-              </Button>
+              <div className="flex gap-1">
+                <Button variant="ghost" size="icon" onClick={() => openEdit(room)}>
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="icon" onClick={() => handleDelete(room.id)}>
+                  <Trash2 className="h-4 w-4 text-destructive" />
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">{room.grade || 'Sem série'}</p>
