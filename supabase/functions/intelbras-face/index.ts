@@ -228,6 +228,7 @@ serve(async (req) => {
       const jsonText = await jsonResp.text();
 
       if (jsonResp.ok && !jsonText.toLowerCase().includes("error") && !jsonText.toLowerCase().includes("batch process error")) {
+        await upsertGuardianDevice();
         return new Response(JSON.stringify({
           success: true, message: hasExistingFace ? "Foto atualizada no dispositivo!" : "Foto enviada ao dispositivo!",
         }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
