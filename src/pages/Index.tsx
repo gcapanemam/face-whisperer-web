@@ -102,6 +102,17 @@ export default function Index() {
             </Button>
           </div>
         </div>
+        {/* Hero images */}
+        <div className="relative mx-auto max-w-6xl px-6 mt-16">
+          <div className="grid gap-6 sm:grid-cols-2">
+            <div className="overflow-hidden rounded-2xl shadow-2xl shadow-primary/10 border border-border">
+              <img src={heroFacialRecognition} alt="Reconhecimento facial com IA" className="w-full h-auto object-cover" />
+            </div>
+            <div className="overflow-hidden rounded-2xl shadow-2xl shadow-primary/10 border border-border">
+              <img src={heroDeviceIntelbras} alt="Dispositivo Intelbras com leitura em 0,2 segundos" className="w-full h-auto object-cover" />
+            </div>
+          </div>
+        </div>
       </section>
 
       {/* Features */}
