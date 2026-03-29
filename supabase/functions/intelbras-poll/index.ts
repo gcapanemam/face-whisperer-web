@@ -128,44 +128,6 @@ async function pollDevice(device: DeviceConfig, supabase: any, testOnly: boolean
   ];
 
   try {
-    // Quick diagnostic: test with env credentials
-    const diagUrl = `${cleanUrl}${endpoints[0]}`;
-    try {
-      const envPassword = Deno.env.get("INTELBRAS_PASSWORD") || "";
-      const envUsername = Deno.env.get("INTELBRAS_USERNAME") || "";
-      
-      // Test with DB credentials
-      const diagResp = await fetch(diagUrl, { method: "GET", redirect: "manual" });
-      const wwwAuth = diagResp.headers.get("www-authenticate");
-      const realm = wwwAuth?.match(/realm="([^"]+)"/)?.[1] || "";
-      const nonce = wwwAuth?.match(/nonce="([^"]+)"/)?.[1] || "";
-      const opaque = wwwAuth?.match(/opaque="([^"]+)"/)?.[1] || "";
-      const uri = new URL(diagUrl).pathname + new URL(diagUrl).search;
-      const cnonce = "test12345678";
-      const nc = "00000001";
-      
-      // HA1 with env password
-      const ha1Env = createHash("md5").update(`${envUsername}:${realm}:${envPassword}`).digest("hex");
-      const ha2 = createHash("md5").update(`GET:${uri}`).digest("hex");
-      const respEnv = createHash("md5").update(`${ha1Env}:${nonce}:${nc}:${cnonce}:auth:${ha2}`).digest("hex");
-      const envAuthHeader = `Digest username="${envUsername}", realm="${realm}", nonce="${nonce}", uri="${uri}", response="${respEnv}", qop=auth, nc=${nc}, cnonce="${cnonce}", opaque="${opaque}"`;
-      
-      await diagResp.text();
-      
-      const testResp = await fetch(diagUrl, { method: "GET", headers: { Authorization: envAuthHeader } });
-      const testBody = await testResp.text();
-      
-      debugInfo._authDiag = {
-        dbPwdLen: device.password.length,
-        envPwdLen: envPassword.length,
-        samePassword: device.password === envPassword,
-        sameUsername: device.username === envUsername,
-        envTestStatus: testResp.status,
-        envTestBody: testBody.slice(0, 200),
-      };
-    } catch (e) {
-      debugInfo._authDiag = { error: e.message };
-    }
 
     for (const endpoint of endpoints) {
       const url = `${cleanUrl}${endpoint}`;
