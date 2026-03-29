@@ -11,6 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Plus, Trash2, Search, Pencil } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PhotoUpload } from '@/components/PhotoUpload';
+import { ImportExcel } from '@/components/ImportExcel';
 
 export default function Children() {
   const [children, setChildren] = useState<any[]>([]);
