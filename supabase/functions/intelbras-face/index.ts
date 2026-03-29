@@ -79,33 +79,43 @@ serve(async (req) => {
     if (action === "probe") {
       const probes: any[] = [];
       
-      // Fetch the app JS bundle to find face API calls
+      // Fetch JS and extract context around AccessFace methods
       try {
         const r = await auth.request(`${deviceUrl}/static/js/app.c8a0dcad95d12bce49b5.js`);
         const js = await r.text();
         
-        // Search for face-related API patterns
-        const facePatterns = [
-          /AccessFace[^"'\s]{0,100}/g,
-          /FaceInfo[^"'\s]{0,100}/g,
-          /face[^"'\s]{0,50}\.cgi[^"'\s]{0,100}/gi,
-          /action=\w*[Ff]ace\w*[^"'\s]{0,50}/g,
-          /cgi-bin\/[^"'\s]*[Ff]ace[^"'\s]*/g,
-          /PhotoData[^"'\s]{0,50}/g,
-          /faceData[^"'\s]{0,50}/gi,
-        ];
-        
-        const matches: string[] = [];
-        for (const pattern of facePatterns) {
-          const found = js.match(pattern) || [];
-          matches.push(...found.map(m => m.slice(0, 150)));
+        // Extract code around key AccessFace patterns
+        const patterns = ["startFind", "doFind", "insertMulti", "list"];
+        const contexts: any[] = [];
+        for (const p of patterns) {
+          const idx = js.indexOf(`AccessFace.${p}`);
+          if (idx >= 0) {
+            contexts.push({ pattern: p, context: js.slice(Math.max(0, idx - 100), idx + 300) });
+          }
         }
-        
-        // Deduplicate
-        const unique = [...new Set(matches)];
-        probes.push({ source: "app.js", size: js.length, faceMatches: unique.slice(0, 30) });
+        probes.push({ source: "app.js patterns", contexts });
       } catch (e) {
-        probes.push({ source: "app.js", error: e.message });
+        probes.push({ error: e.message });
+      }
+
+      // Try the finder pattern
+      try {
+        const startUrl = `${deviceUrl}/cgi-bin/AccessFace.cgi?action=startFind&condition.UserID=2`;
+        const r = await auth.request(startUrl);
+        const text = await r.text();
+        probes.push({ action: "startFind", status: r.status, response: text.slice(0, 500) });
+        
+        if (r.ok && text.includes("token")) {
+          const tokenMatch = text.match(/token=(\d+)/);
+          if (tokenMatch) {
+            const doUrl = `${deviceUrl}/cgi-bin/AccessFace.cgi?action=doFind&token=${tokenMatch[1]}&count=10`;
+            const dr = await auth.request(doUrl);
+            const dt = await dr.text();
+            probes.push({ action: "doFind", status: dr.status, response: dt.slice(0, 800) });
+          }
+        }
+      } catch (e) {
+        probes.push({ action: "startFind", error: e.message });
       }
 
       return new Response(JSON.stringify({ device: "SS 3532 MF W", results: probes }), {
