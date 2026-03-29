@@ -425,6 +425,7 @@ export default function Guardians() {
             </div>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       <div className="relative">
