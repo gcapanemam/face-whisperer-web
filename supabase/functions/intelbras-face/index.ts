@@ -77,38 +77,23 @@ serve(async (req) => {
     const auth = new DigestAuth(username, password);
 
     if (action === "probe") {
-      // Probe AccessFace.cgi with POST methods
       const probes: any[] = [];
       
-      // Test POST with JSON body for AccessFace.cgi
-      const postTests = [
-        { url: `${deviceUrl}/cgi-bin/AccessFace.cgi?action=list`, body: '{"UserIDList":[{"UserID":"1"}]}' },
-        { url: `${deviceUrl}/cgi-bin/AccessFace.cgi?action=list`, body: '{"searchResultPosition":0,"maxResults":10}' },
-        { url: `${deviceUrl}/cgi-bin/AccessUser.cgi?action=list`, body: '{"searchResultPosition":0,"maxResults":10}' },
-        { url: `${deviceUrl}/cgi-bin/AccessUser.cgi?action=list`, body: '{"UserIDList":[{"UserID":"1"}]}' },
-      ];
-      
-      for (const test of postTests) {
-        try {
-          const r = await auth.request(test.url, "POST", test.body, {"Content-Type": "application/json"});
-          const text = await r.text();
-          probes.push({ url: test.url.replace(deviceUrl, ""), method: "POST", body: test.body, status: r.status, response: text.slice(0, 500) });
-        } catch (e) {
-          probes.push({ url: test.url.replace(deviceUrl, ""), error: e.message });
-        }
-      }
-
-      // Also try GET with different params  
+      // AccessFace.cgi with Dahua condition.UserID format
       const getTests = [
-        `${deviceUrl}/cgi-bin/AccessFace.cgi?action=list&channel=0`,
-        `${deviceUrl}/cgi-bin/AccessFace.cgi?action=list&channel=1`,
-        `${deviceUrl}/cgi-bin/faceRecognitionServer.cgi?action=list`,
+        `${deviceUrl}/cgi-bin/AccessFace.cgi?action=list&condition.UserID=2`,
+        `${deviceUrl}/cgi-bin/AccessFace.cgi?action=list&condition.UserIDList[0].UserID=2`,
+        `${deviceUrl}/cgi-bin/AccessFace.cgi?action=list&UserID=2&FACEINDEX=0`,
+        `${deviceUrl}/cgi-bin/AccessFace.cgi?action=multiInsert`,
+        `${deviceUrl}/cgi-bin/AccessFace.cgi?action=insert`,
+        `${deviceUrl}/cgi-bin/recordUpdater.cgi?action=insert&name=AccessControlCard&UserID=test&CardNo=test&CardName=test&CardType=0&Doors[0]=0`,
       ];
       for (const url of getTests) {
         try {
           const r = await auth.request(url);
-          const text = await r.text();
-          probes.push({ url: url.replace(deviceUrl, ""), status: r.status, response: text.slice(0, 500) });
+          const ct = r.headers.get("content-type") || "";
+          const text = ct.includes("image") ? `[image ${r.status}]` : await r.text();
+          probes.push({ url: url.replace(deviceUrl, ""), status: r.status, ct, response: text.slice(0, 500) });
         } catch (e) {
           probes.push({ url: url.replace(deviceUrl, ""), error: e.message });
         }
