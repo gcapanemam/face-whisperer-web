@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Md5 } from "https://deno.land/std@0.160.0/hash/md5.ts";
+import { createHash } from "node:crypto";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -19,7 +19,7 @@ class DigestAuth {
   }
 
   private md5(str: string): string {
-    return new Md5().update(str).toString();
+    return createHash("md5").update(str).digest("hex");
   }
 
   async authenticate(url: string, method: string = "GET"): Promise<Response> {
@@ -32,6 +32,7 @@ class DigestAuth {
     const realm = wwwAuth.match(/realm="([^"]+)"/)?.[1] || "";
     const nonce = wwwAuth.match(/nonce="([^"]+)"/)?.[1] || "";
     const qop = wwwAuth.match(/qop="([^"]+)"/)?.[1] || "";
+    const opaque = wwwAuth.match(/opaque="([^"]+)"/)?.[1] || "";
 
     this.nc++;
     const ncStr = this.nc.toString(16).padStart(8, "0");
@@ -48,9 +49,9 @@ class DigestAuth {
       response = this.md5(`${ha1}:${nonce}:${ha2}`);
     }
 
-    const authHeader = `Digest username="${this.username}", realm="${realm}", nonce="${nonce}", uri="${uri}", response="${response}"${
-      qop ? `, qop=${qop.split(",")[0]}, nc=${ncStr}, cnonce="${cnonce}"` : ""
-    }`;
+    let authHeader = `Digest username="${this.username}", realm="${realm}", nonce="${nonce}", uri="${uri}", response="${response}"`;
+    if (qop) authHeader += `, qop=${qop.split(",")[0]}, nc=${ncStr}, cnonce="${cnonce}"`;
+    if (opaque) authHeader += `, opaque="${opaque}"`;
 
     await firstResponse.text();
     return fetch(url, { method, headers: { Authorization: authHeader } });
@@ -81,7 +82,20 @@ async function getDevices(supabase: any, deviceId?: string): Promise<DeviceConfi
     .select("id, device_url, username, password, name")
     .eq("enabled", true);
 
-  if (data && data.length > 0) return data;
+  if (data && data.length > 0) {
+    // If env credentials exist, use them as override for matching devices
+    const envUrl = Deno.env.get("INTELBRAS_DEVICE_URL")?.replace(/#.*$/, '').replace(/\/+$/, '') || "";
+    const envUsername = Deno.env.get("INTELBRAS_USERNAME") || "";
+    const envPassword = Deno.env.get("INTELBRAS_PASSWORD") || "";
+    
+    return data.map((d: any) => {
+      const cleanDevUrl = d.device_url.replace(/#.*$/, '').replace(/\/+$/, '');
+      if (envUrl && cleanDevUrl === envUrl && envUsername && envPassword) {
+        return { ...d, username: envUsername, password: envPassword };
+      }
+      return d;
+    });
+  }
   return getFallbackDevice();
 }
 
@@ -114,6 +128,7 @@ async function pollDevice(device: DeviceConfig, supabase: any, testOnly: boolean
   ];
 
   try {
+
     for (const endpoint of endpoints) {
       const url = `${cleanUrl}${endpoint}`;
       console.log(`[${device.name}] Trying: ${url}`);

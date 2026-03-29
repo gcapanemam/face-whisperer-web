@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { Md5 } from "https://deno.land/std@0.160.0/hash/md5.ts";
+import { createHash } from "node:crypto";
 import { encode as base64Encode } from "https://deno.land/std@0.160.0/encoding/base64.ts";
 
 const corsHeaders = {
@@ -20,7 +20,7 @@ class DigestAuth {
   }
 
   private md5(str: string): string {
-    return new Md5().update(str).toString();
+    return createHash("md5").update(str).digest("hex");
   }
 
   async request(url: string, method: string = "GET", body?: BodyInit, extraHeaders?: Record<string, string>): Promise<Response> {
@@ -33,6 +33,7 @@ class DigestAuth {
     const realm = wwwAuth.match(/realm="([^"]+)"/)?.[1] || "";
     const nonce = wwwAuth.match(/nonce="([^"]+)"/)?.[1] || "";
     const qop = wwwAuth.match(/qop="([^"]+)"/)?.[1] || "";
+    const opaque = wwwAuth.match(/opaque="([^"]+)"/)?.[1] || "";
 
     this.nc++;
     const ncStr = this.nc.toString(16).padStart(8, "0");
@@ -45,9 +46,9 @@ class DigestAuth {
       ? this.md5(`${ha1}:${nonce}:${ncStr}:${cnonce}:${qop.split(",")[0]}:${ha2}`)
       : this.md5(`${ha1}:${nonce}:${ha2}`);
 
-    const authHeader = `Digest username="${this.username}", realm="${realm}", nonce="${nonce}", uri="${uri}", response="${response}"${
-      qop ? `, qop=${qop.split(",")[0]}, nc=${ncStr}, cnonce="${cnonce}"` : ""
-    }`;
+    let authHeader = `Digest username="${this.username}", realm="${realm}", nonce="${nonce}", uri="${uri}", response="${response}"`;
+    if (qop) authHeader += `, qop=${qop.split(",")[0]}, nc=${ncStr}, cnonce="${cnonce}"`;
+    if (opaque) authHeader += `, opaque="${opaque}"`;
 
     await firstResponse.text();
     return fetch(url, { method, headers: { Authorization: authHeader, ...(extraHeaders || {}) }, body });
