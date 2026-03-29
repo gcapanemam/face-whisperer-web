@@ -19,7 +19,7 @@ class DigestAuth {
   }
 
   private md5(str: string): string {
-    return new Md5().update(str).toString();
+    return createHash("md5").update(str).digest("hex");
   }
 
   async authenticate(url: string, method: string = "GET"): Promise<Response> {
