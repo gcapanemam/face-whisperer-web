@@ -79,40 +79,33 @@ serve(async (req) => {
     if (action === "probe") {
       const probes: any[] = [];
       
-      // Try multipart POST for AccessFace.cgi (Dahua newer protocol)
-      const boundary = "----DahuaBoundary";
-      const multipartBody = `--${boundary}\r\nContent-Disposition: form-data; name="condition.UserID"\r\n\r\n2\r\n--${boundary}--\r\n`;
-      
-      const postMultipartTests = [
-        { url: `${deviceUrl}/cgi-bin/AccessFace.cgi?action=list`, ct: `multipart/form-data; boundary=${boundary}`, body: multipartBody },
-        { url: `${deviceUrl}/cgi-bin/AccessFace.cgi?action=list`, ct: `application/x-www-form-urlencoded`, body: "condition.UserID=2" },
-      ];
-      
-      for (const test of postMultipartTests) {
-        try {
-          const r = await auth.request(test.url, "POST", test.body, {"Content-Type": test.ct});
-          const ct = r.headers.get("content-type") || "";
-          let text: string;
-          if (ct.includes("multipart") || ct.includes("image")) {
-            const data = await r.arrayBuffer();
-            text = `[binary data, ${data.byteLength} bytes, ct: ${ct}]`;
-          } else {
-            text = await r.text();
-          }
-          probes.push({ url: test.url.replace(deviceUrl, ""), method: "POST", reqCt: test.ct, status: r.status, resCt: ct, response: text.slice(0, 800) });
-        } catch (e) {
-          probes.push({ url: test.url.replace(deviceUrl, ""), error: e.message });
-        }
-      }
-
-      // Try fetching the web UI JS to find API endpoints
+      // Fetch the app JS bundle to find face API calls
       try {
-        const r = await auth.request(`${deviceUrl}/`);
-        const html = await r.text();
-        const scriptMatches = [...html.matchAll(/(src|href)="([^"]+\.(js|css))"/g)].map(m => m[2]);
-        probes.push({ url: "/", status: r.status, scripts: scriptMatches.slice(0, 20), htmlPreview: html.slice(0, 1500) });
+        const r = await auth.request(`${deviceUrl}/static/js/app.c8a0dcad95d12bce49b5.js`);
+        const js = await r.text();
+        
+        // Search for face-related API patterns
+        const facePatterns = [
+          /AccessFace[^"'\s]{0,100}/g,
+          /FaceInfo[^"'\s]{0,100}/g,
+          /face[^"'\s]{0,50}\.cgi[^"'\s]{0,100}/gi,
+          /action=\w*[Ff]ace\w*[^"'\s]{0,50}/g,
+          /cgi-bin\/[^"'\s]*[Ff]ace[^"'\s]*/g,
+          /PhotoData[^"'\s]{0,50}/g,
+          /faceData[^"'\s]{0,50}/gi,
+        ];
+        
+        const matches: string[] = [];
+        for (const pattern of facePatterns) {
+          const found = js.match(pattern) || [];
+          matches.push(...found.map(m => m.slice(0, 150)));
+        }
+        
+        // Deduplicate
+        const unique = [...new Set(matches)];
+        probes.push({ source: "app.js", size: js.length, faceMatches: unique.slice(0, 30) });
       } catch (e) {
-        probes.push({ url: "/", error: e.message });
+        probes.push({ source: "app.js", error: e.message });
       }
 
       return new Response(JSON.stringify({ device: "SS 3532 MF W", results: probes }), {
