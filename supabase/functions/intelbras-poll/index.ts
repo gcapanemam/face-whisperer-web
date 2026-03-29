@@ -115,41 +115,40 @@ async function pollDevice(device: DeviceConfig, supabase: any, testOnly: boolean
   ];
 
   try {
-    // Quick diagnostic: test first endpoint auth details
+    // Quick diagnostic: test with env credentials
     const diagUrl = `${cleanUrl}${endpoints[0]}`;
     try {
+      const envPassword = Deno.env.get("INTELBRAS_PASSWORD") || "";
+      const envUsername = Deno.env.get("INTELBRAS_USERNAME") || "";
+      
+      // Test with DB credentials
       const diagResp = await fetch(diagUrl, { method: "GET", redirect: "manual" });
       const wwwAuth = diagResp.headers.get("www-authenticate");
       const realm = wwwAuth?.match(/realm="([^"]+)"/)?.[1] || "";
       const nonce = wwwAuth?.match(/nonce="([^"]+)"/)?.[1] || "";
-      const qop = wwwAuth?.match(/qop="([^"]+)"/)?.[1] || "";
       const opaque = wwwAuth?.match(/opaque="([^"]+)"/)?.[1] || "";
       const uri = new URL(diagUrl).pathname + new URL(diagUrl).search;
-      
-      const ha1 = createHash("md5").update(`${device.username}:${realm}:${device.password}`).digest("hex");
-      const ha2 = createHash("md5").update(`GET:${uri}`).digest("hex");
       const cnonce = "test12345678";
       const nc = "00000001";
-      const resp = createHash("md5").update(`${ha1}:${nonce}:${nc}:${cnonce}:auth:${ha2}`).digest("hex");
       
-      const testAuthHeader = `Digest username="${device.username}", realm="${realm}", nonce="${nonce}", uri="${uri}", response="${resp}", qop=auth, nc=${nc}, cnonce="${cnonce}", opaque="${opaque}"`;
+      // HA1 with env password
+      const ha1Env = createHash("md5").update(`${envUsername}:${realm}:${envPassword}`).digest("hex");
+      const ha2 = createHash("md5").update(`GET:${uri}`).digest("hex");
+      const respEnv = createHash("md5").update(`${ha1Env}:${nonce}:${nc}:${cnonce}:auth:${ha2}`).digest("hex");
+      const envAuthHeader = `Digest username="${envUsername}", realm="${realm}", nonce="${nonce}", uri="${uri}", response="${respEnv}", qop=auth, nc=${nc}, cnonce="${cnonce}", opaque="${opaque}"`;
       
       await diagResp.text();
       
-      // Test the auth manually
-      const testResp = await fetch(diagUrl, { method: "GET", headers: { Authorization: testAuthHeader } });
+      const testResp = await fetch(diagUrl, { method: "GET", headers: { Authorization: envAuthHeader } });
       const testBody = await testResp.text();
       
       debugInfo._authDiag = {
-        firstStatus: diagResp.status,
-        wwwAuth: wwwAuth?.slice(0, 300),
-        testAuthHeader,
-        testStatus: testResp.status,
-        testBody: testBody.slice(0, 200),
-        ha1Input: `${device.username}:${realm}:<password>`,
-        ha2Input: `GET:${uri}`,
-        ha1,
-        ha2,
+        dbPwdLen: device.password.length,
+        envPwdLen: envPassword.length,
+        samePassword: device.password === envPassword,
+        sameUsername: device.username === envUsername,
+        envTestStatus: testResp.status,
+        envTestBody: testBody.slice(0, 200),
       };
     } catch (e) {
       debugInfo._authDiag = { error: e.message };
