@@ -18,6 +18,7 @@ const adminLinks = [
   { title: 'Usuários', icon: UserCheck, path: '/users' },
   { title: 'Relatórios', icon: ClipboardList, path: '/reports' },
   { title: 'Monitoramento', icon: MonitorSmartphone, path: '/monitoring' },
+  { title: 'Dispositivos', icon: Settings, path: '/devices' },
 ];
 
 const teacherLinks = [

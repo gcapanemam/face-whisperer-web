@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MonitorSmartphone, AlertTriangle, CheckCircle, RefreshCw, Wifi, WifiOff } from 'lucide-react';
 
 export function ReceptionDashboard() {
@@ -11,6 +12,8 @@ export function ReceptionDashboard() {
   const [deviceStatus, setDeviceStatus] = useState<'online' | 'offline' | 'polling' | 'unknown'>('unknown');
   const [lastPoll, setLastPoll] = useState<string | null>(null);
   const [isPolling, setIsPolling] = useState(false);
+  const [devices, setDevices] = useState<any[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>('all');
 
   const fetchEvents = async () => {
     const { data } = await supabase
@@ -31,15 +34,21 @@ export function ReceptionDashboard() {
     setUnknownCount(count || 0);
   };
 
+  const fetchDevices = async () => {
+    const { data } = await supabase.from('devices').select('id, name, enabled').eq('enabled', true).order('name');
+    setDevices(data || []);
+  };
+
   const pollDevice = useCallback(async () => {
     setIsPolling(true);
     setDeviceStatus('polling');
     try {
-      const { data, error } = await supabase.functions.invoke('intelbras-poll', { method: 'POST' });
+      const body: any = {};
+      if (selectedDeviceId !== 'all') body.deviceId = selectedDeviceId;
+      const { data, error } = await supabase.functions.invoke('intelbras-poll', { body });
       if (error) throw error;
       setDeviceStatus(data?.deviceStatus === 'online' ? 'online' : 'offline');
       setLastPoll(new Date().toLocaleTimeString('pt-BR'));
-      // Refresh data after poll
       await Promise.all([fetchEvents(), fetchUnknown()]);
     } catch (err) {
       console.error('Poll error:', err);
@@ -47,12 +56,12 @@ export function ReceptionDashboard() {
     } finally {
       setIsPolling(false);
     }
-  }, []);
+  }, [selectedDeviceId]);
 
   useEffect(() => {
     fetchEvents();
     fetchUnknown();
-    // Initial poll
+    fetchDevices();
     pollDevice();
 
     // Auto-poll every 10 seconds
@@ -98,10 +107,25 @@ export function ReceptionDashboard() {
           <h1 className="font-display text-2xl font-bold">Monitoramento</h1>
           <p className="text-muted-foreground">Feed ao vivo de reconhecimentos faciais</p>
         </div>
-        <Button variant="outline" onClick={pollDevice} disabled={isPolling}>
-          <RefreshCw className={`h-4 w-4 mr-1 ${isPolling ? 'animate-spin' : ''}`} />
-          Atualizar
-        </Button>
+        <div className="flex items-center gap-2">
+          {devices.length > 1 && (
+            <Select value={selectedDeviceId} onValueChange={setSelectedDeviceId}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Dispositivo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                {devices.map(d => (
+                  <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Button variant="outline" onClick={pollDevice} disabled={isPolling}>
+            <RefreshCw className={`h-4 w-4 mr-1 ${isPolling ? 'animate-spin' : ''}`} />
+            Atualizar
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">

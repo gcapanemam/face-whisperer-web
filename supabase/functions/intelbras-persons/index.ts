@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Md5 } from "https://deno.land/std@0.160.0/hash/md5.ts";
 
 const corsHeaders = {
@@ -48,9 +49,45 @@ class DigestAuth {
     }`;
 
     await firstResponse.text();
-
     return fetch(url, { method, headers: { Authorization: authHeader } });
   }
+}
+
+interface DeviceConfig {
+  id: string;
+  device_url: string;
+  username: string;
+  password: string;
+}
+
+async function getDeviceConfig(supabase: any, deviceId?: string): Promise<DeviceConfig | null> {
+  if (deviceId) {
+    const { data } = await supabase
+      .from("devices")
+      .select("id, device_url, username, password")
+      .eq("id", deviceId)
+      .single();
+    if (data) return data;
+  }
+
+  const { data: devices } = await supabase
+    .from("devices")
+    .select("id, device_url, username, password")
+    .eq("enabled", true)
+    .limit(1);
+  if (devices && devices.length > 0) return devices[0];
+
+  // Fallback to env vars
+  const deviceUrl = Deno.env.get("INTELBRAS_DEVICE_URL");
+  const username = Deno.env.get("INTELBRAS_USERNAME");
+  const password = Deno.env.get("INTELBRAS_PASSWORD");
+  if (!deviceUrl || !username || !password) return null;
+  return {
+    id: "env",
+    device_url: deviceUrl.replace(/#.*$/, '').replace(/\/+$/, ''),
+    username,
+    password,
+  };
 }
 
 serve(async (req) => {
@@ -59,34 +96,36 @@ serve(async (req) => {
   }
 
   try {
-    const deviceUrl = (Deno.env.get("INTELBRAS_DEVICE_URL") || "").replace(/#.*$/, "").replace(/\/+$/, "");
-    const username = Deno.env.get("INTELBRAS_USERNAME");
-    const password = Deno.env.get("INTELBRAS_PASSWORD");
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
-    if (!deviceUrl || !username || !password) {
-      return new Response(JSON.stringify({ error: "Credenciais não configuradas" }), {
+    let deviceId: string | undefined;
+    try {
+      const body = await req.json();
+      deviceId = body.deviceId;
+    } catch {}
+
+    const config = await getDeviceConfig(supabase, deviceId);
+    if (!config) {
+      return new Response(JSON.stringify({ error: "Nenhum dispositivo configurado", persons: [] }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const auth = new DigestAuth(username, password);
+    const auth = new DigestAuth(config.username, config.password);
+    const deviceUrl = config.device_url;
 
-    // Try to list persons using recordFinder for AccessControlCard
     const url = `${deviceUrl}/cgi-bin/recordFinder.cgi?action=find&name=AccessControlCard&count=1000`;
-    console.log(`Fetching persons from: ${url}`);
-
     const response = await auth.authenticate(url);
     const text = await response.text();
-    console.log(`Response status: ${response.status}`);
-    console.log(`Response (first 1000 chars): ${text.slice(0, 1000)}`);
 
     if (text.includes("<!DOCTYPE") || text.includes("<html")) {
-      return new Response(JSON.stringify({ error: "Dispositivo retornou HTML em vez de dados da API", persons: [] }), {
+      return new Response(JSON.stringify({ error: "Dispositivo retornou HTML", persons: [] }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Parse records
     const persons: any[] = [];
     const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
     const records: Record<string, Record<string, string>> = {};
@@ -112,8 +151,6 @@ serve(async (req) => {
         validTo: r.ValidDateEnd || "",
       });
     }
-
-    console.log(`Found ${persons.length} persons`);
 
     return new Response(JSON.stringify({ persons, total: persons.length }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

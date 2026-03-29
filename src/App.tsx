@@ -14,6 +14,7 @@ import Users from "./pages/Users";
 import Reports from "./pages/Reports";
 import Monitoring from "./pages/Monitoring";
 import Notifications from "./pages/Notifications";
+import Devices from "./pages/Devices";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -50,6 +51,7 @@ const App = () => (
             <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
             <Route path="/monitoring" element={<ProtectedRoute><Monitoring /></ProtectedRoute>} />
             <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
+            <Route path="/devices" element={<ProtectedRoute><Devices /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

@@ -82,6 +82,39 @@ export type Database = {
         }
         Relationships: []
       }
+      devices: {
+        Row: {
+          created_at: string
+          device_url: string
+          enabled: boolean
+          id: string
+          name: string
+          password: string
+          updated_at: string
+          username: string
+        }
+        Insert: {
+          created_at?: string
+          device_url: string
+          enabled?: boolean
+          id?: string
+          name: string
+          password: string
+          updated_at?: string
+          username: string
+        }
+        Update: {
+          created_at?: string
+          device_url?: string
+          enabled?: boolean
+          id?: string
+          name?: string
+          password?: string
+          updated_at?: string
+          username?: string
+        }
+        Relationships: []
+      }
       guardian_children: {
         Row: {
           authorized: boolean

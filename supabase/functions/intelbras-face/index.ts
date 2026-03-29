@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Md5 } from "https://deno.land/std@0.160.0/hash/md5.ts";
 import { encode as base64Encode } from "https://deno.land/std@0.160.0/encoding/base64.ts";
 
@@ -53,59 +54,89 @@ class DigestAuth {
   }
 }
 
+interface DeviceConfig {
+  id: string;
+  device_url: string;
+  username: string;
+  password: string;
+}
+
+async function getDeviceConfig(supabase: any, deviceId?: string): Promise<DeviceConfig | null> {
+  if (deviceId) {
+    const { data } = await supabase
+      .from("devices")
+      .select("id, device_url, username, password")
+      .eq("id", deviceId)
+      .single();
+    if (data) return data;
+  }
+
+  // Try first enabled device
+  const { data: devices } = await supabase
+    .from("devices")
+    .select("id, device_url, username, password")
+    .eq("enabled", true)
+    .limit(1);
+  if (devices && devices.length > 0) return devices[0];
+
+  // Fallback to env vars
+  const deviceUrl = Deno.env.get("INTELBRAS_DEVICE_URL");
+  const username = Deno.env.get("INTELBRAS_USERNAME");
+  const password = Deno.env.get("INTELBRAS_PASSWORD");
+  if (!deviceUrl || !username || !password) return null;
+  return {
+    id: "env",
+    device_url: deviceUrl.replace(/#.*$/, '').replace(/\/+$/, ''),
+    username,
+    password,
+  };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const deviceUrl = (Deno.env.get("INTELBRAS_DEVICE_URL") || "").replace(/#.*$/, "").replace(/\/+$/, "");
-    const username = Deno.env.get("INTELBRAS_USERNAME");
-    const password = Deno.env.get("INTELBRAS_PASSWORD");
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
-    if (!deviceUrl || !username || !password) {
-      return new Response(JSON.stringify({ error: "Credenciais não configuradas" }), {
+    const { action, personId, photoUrl, deviceId } = await req.json();
+
+    const config = await getDeviceConfig(supabase, deviceId);
+    if (!config) {
+      return new Response(JSON.stringify({ error: "Nenhum dispositivo configurado" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const { action, personId, photoUrl } = await req.json();
-    const auth = new DigestAuth(username, password);
+    const deviceUrl = config.device_url;
+    const auth = new DigestAuth(config.username, config.password);
 
     if (action === "check") {
-      // Check if a face exists for this UserID on the device
       const startUrl = `${deviceUrl}/cgi-bin/AccessFace.cgi?action=startFind&condition.UserID=${encodeURIComponent(personId)}`;
       const startResp = await auth.request(startUrl);
       const startText = await startResp.text();
-      console.log(`check startFind: ${startText}`);
 
       let startData;
       try { startData = JSON.parse(startText); } catch { startData = null; }
 
       if (startData?.Total > 0) {
-        // Get face info
         const doUrl = `${deviceUrl}/cgi-bin/AccessFace.cgi?action=doFind&Token=${startData.Token}&Offset=0&Count=10`;
         const doResp = await auth.request(doUrl);
         const doText = await doResp.text();
-        console.log(`check doFind: ${doText.slice(0, 500)}`);
-
         let info = null;
         try { info = JSON.parse(doText); } catch {}
-        
         try { await auth.request(`${deviceUrl}/cgi-bin/AccessFace.cgi?action=stopFind&Token=${startData.Token}`); } catch {}
 
-        return new Response(JSON.stringify({ 
-          success: true, 
-          hasFace: true, 
-          total: startData.Total,
-          info: info?.Info || null,
-          message: "Face cadastrada no dispositivo (o SS 3532 não permite download da imagem)"
-        }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return new Response(JSON.stringify({
+          success: true, hasFace: true, total: startData.Total, info: info?.Info || null,
+          message: "Face cadastrada no dispositivo"
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      if (startData) {
+      if (startData?.Token) {
         try { await auth.request(`${deviceUrl}/cgi-bin/AccessFace.cgi?action=stopFind&Token=${startData.Token}`); } catch {}
       }
 
@@ -114,14 +145,10 @@ serve(async (req) => {
       });
 
     } else if (action === "get") {
-      // SS 3532 MF W does not support downloading face photos via API
-      // We can only check if a face exists
-      return new Response(JSON.stringify({ 
-        error: "O modelo SS 3532 MF W não suporta download de fotos via API. Use a ação 'check' para verificar se a face está cadastrada.",
+      return new Response(JSON.stringify({
+        error: "O modelo SS 3532 MF W não suporta download de fotos via API. Use a ação 'check'.",
         suggestion: "check"
-      }), {
-        status: 501, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      }), { status: 501, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     } else if (action === "set") {
       if (!personId || !photoUrl) {
@@ -130,7 +157,6 @@ serve(async (req) => {
         });
       }
 
-      console.log(`Downloading photo: ${photoUrl}`);
       const optimizedPhotoUrl = (() => {
         try {
           const url = new URL(photoUrl);
@@ -143,13 +169,10 @@ serve(async (req) => {
             url.searchParams.set("format", "origin");
             return url.toString();
           }
-        } catch {
-          // fallback to original URL below
-        }
+        } catch {}
         return photoUrl;
       })();
 
-      console.log(`Downloading optimized photo: ${optimizedPhotoUrl}`);
       const photoResp = await fetch(optimizedPhotoUrl);
       if (!photoResp.ok) {
         return new Response(JSON.stringify({ error: "Não foi possível baixar a foto" }), {
@@ -158,100 +181,61 @@ serve(async (req) => {
       }
 
       const photoBytes = new Uint8Array(await photoResp.arrayBuffer());
-      console.log(`Optimized photo size: ${photoBytes.length} bytes`);
       if (photoBytes.length > 200 * 1024) {
-        return new Response(JSON.stringify({
-          error: "A foto ainda está muito grande para o dispositivo após otimização",
-          size: photoBytes.length,
-        }), {
+        return new Response(JSON.stringify({ error: "Foto muito grande para o dispositivo", size: photoBytes.length }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
       const photoBase64 = base64Encode(photoBytes).replace(/\s/g, "");
 
-      const jsonBody = JSON.stringify({
-        FaceList: [
-          {
-            UserID: personId,
-            PhotoData: [photoBase64],
-          },
-        ],
-      });
-
+      // Check if face exists
       const startUrl = `${deviceUrl}/cgi-bin/AccessFace.cgi?action=startFind&condition.UserID=${encodeURIComponent(personId)}`;
       const startResp = await auth.request(startUrl);
       const startText = await startResp.text();
-      console.log(`set startFind: ${startText}`);
-
-      let startData: { Total?: number; Token?: string } | null = null;
+      let startData: any = null;
       try { startData = JSON.parse(startText); } catch {}
-
       const hasExistingFace = Boolean(startData?.Total && startData.Total > 0);
       if (startData?.Token) {
-        try {
-          await auth.request(`${deviceUrl}/cgi-bin/AccessFace.cgi?action=stopFind&Token=${startData.Token}`);
-        } catch {
-          // ignore cleanup errors
-        }
+        try { await auth.request(`${deviceUrl}/cgi-bin/AccessFace.cgi?action=stopFind&Token=${startData.Token}`); } catch {}
       }
 
       const actionName = hasExistingFace ? "updateMulti" : "insertMulti";
       const actionUrl = `${deviceUrl}/cgi-bin/AccessFace.cgi?action=${actionName}`;
 
-      console.log(`${actionName} (JSON): ${actionUrl}, body length: ${jsonBody.length}`);
-      const jsonResp = await auth.request(actionUrl, "POST", jsonBody, {
-        "Content-Type": "application/json",
-      });
+      const jsonBody = JSON.stringify({ FaceList: [{ UserID: personId, PhotoData: [photoBase64] }] });
+      const jsonResp = await auth.request(actionUrl, "POST", jsonBody, { "Content-Type": "application/json" });
       const jsonText = await jsonResp.text();
-      console.log(`${actionName} JSON response (${jsonResp.status}): ${jsonText.slice(0, 500)}`);
 
       if (jsonResp.ok && !jsonText.toLowerCase().includes("error") && !jsonText.toLowerCase().includes("batch process error")) {
         return new Response(JSON.stringify({
-          success: true,
-          message: hasExistingFace ? "Foto atualizada no dispositivo!" : "Foto enviada ao dispositivo!",
-        }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+          success: true, message: hasExistingFace ? "Foto atualizada no dispositivo!" : "Foto enviada ao dispositivo!",
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
+      // Fallback to form-encoded
       const formBody = new URLSearchParams();
       formBody.set("FaceList[0].UserID", personId);
       formBody.set("FaceList[0].PhotoData[0]", photoBase64);
-
-      console.log(`${actionName} (form body): ${actionUrl}, body length: ${formBody.toString().length}`);
-      const formResp = await auth.request(actionUrl, "POST", formBody.toString(), {
-        "Content-Type": "application/x-www-form-urlencoded",
-      });
+      const formResp = await auth.request(actionUrl, "POST", formBody.toString(), { "Content-Type": "application/x-www-form-urlencoded" });
       const formText = await formResp.text();
-      console.log(`${actionName} form response (${formResp.status}): ${formText.slice(0, 500)}`);
 
       if (formResp.ok && !formText.toLowerCase().includes("error") && !formText.toLowerCase().includes("batch process error")) {
         return new Response(JSON.stringify({
-          success: true,
-          message: hasExistingFace ? "Foto atualizada no dispositivo!" : "Foto enviada ao dispositivo!",
-        }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+          success: true, message: hasExistingFace ? "Foto atualizada no dispositivo!" : "Foto enviada ao dispositivo!",
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
       return new Response(JSON.stringify({
         error: hasExistingFace ? "Erro ao atualizar foto" : "Erro ao enviar foto",
         raw: formText.slice(0, 300) || jsonText.slice(0, 300),
         jsonRaw: jsonText.slice(0, 300),
-        faceExists: hasExistingFace,
-      }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     } else if (action === "delete") {
-      // Try query param format first, then JSON
       const url = `${deviceUrl}/cgi-bin/AccessFace.cgi?action=removeMulti&UserIDList[0].UserID=${encodeURIComponent(personId)}`;
-      console.log(`Deleting face: ${url}`);
       const resp = await auth.request(url);
       const text = await resp.text();
-      console.log(`Delete response (${resp.status}): ${text.slice(0, 300)}`);
-
       return new Response(JSON.stringify({ success: resp.ok, message: resp.ok ? "Face removida do dispositivo" : text.slice(0, 200) }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
