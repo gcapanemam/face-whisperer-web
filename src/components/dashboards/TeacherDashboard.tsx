@@ -114,9 +114,12 @@ export function TeacherDashboard() {
             <Card key={pickup.id} className="border-destructive/30 bg-destructive/5">
               <CardContent className="flex items-center justify-between p-4">
                 <div className="flex items-center gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-                    <Users className="h-6 w-6 text-primary" />
-                  </div>
+                  <Avatar className="h-12 w-12">
+                    {pickup.children?.photo_url ? (
+                      <AvatarImage src={pickup.children.photo_url} alt={pickup.children?.full_name} />
+                    ) : null}
+                    <AvatarFallback>{pickup.children?.full_name?.[0] || '?'}</AvatarFallback>
+                  </Avatar>
                   <div>
                     <p className="font-semibold">{pickup.guardians?.full_name}</p>
                     <p className="text-sm text-muted-foreground">
