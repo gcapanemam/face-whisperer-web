@@ -77,32 +77,44 @@ serve(async (req) => {
     const auth = new DigestAuth(username, password);
 
     if (action === "probe") {
-      // Discover which face-related endpoints this device supports
-      const probeEndpoints = [
-        `${deviceUrl}/cgi-bin/FaceInfoManager.cgi?action=get&UserID=1`,
-        `${deviceUrl}/cgi-bin/AccessFace.cgi?action=list&UserID=1`,
-        `${deviceUrl}/cgi-bin/AccessFace.cgi?action=list`,
-        `${deviceUrl}/cgi-bin/AccessFace.cgi?action=getCount`,
-        `${deviceUrl}/cgi-bin/AccessFace.cgi?action=get&UserID=1`,
-        `${deviceUrl}/cgi-bin/AccessUser.cgi?action=list&UserID=1`,
-        `${deviceUrl}/cgi-bin/ISAPI/AccessControl/UserInfo/Search`,
-        `${deviceUrl}/cgi-bin/recordFinder.cgi?action=factory.getCollect`,
-        `${deviceUrl}/cgi-bin/magicBox.cgi?action=getProductDefinition`,
-        `${deviceUrl}/cgi-bin/magicBox.cgi?action=getDeviceType`,
-        `${deviceUrl}/cgi-bin/magicBox.cgi?action=getSoftwareVersion`,
+      // Probe AccessFace.cgi with POST methods
+      const probes: any[] = [];
+      
+      // Test POST with JSON body for AccessFace.cgi
+      const postTests = [
+        { url: `${deviceUrl}/cgi-bin/AccessFace.cgi?action=list`, body: '{"UserIDList":[{"UserID":"1"}]}' },
+        { url: `${deviceUrl}/cgi-bin/AccessFace.cgi?action=list`, body: '{"searchResultPosition":0,"maxResults":10}' },
+        { url: `${deviceUrl}/cgi-bin/AccessUser.cgi?action=list`, body: '{"searchResultPosition":0,"maxResults":10}' },
+        { url: `${deviceUrl}/cgi-bin/AccessUser.cgi?action=list`, body: '{"UserIDList":[{"UserID":"1"}]}' },
       ];
-      const results: any[] = [];
-      for (const url of probeEndpoints) {
+      
+      for (const test of postTests) {
         try {
-          const r = await auth.request(url);
-          const ct = r.headers.get("content-type") || "";
-          const text = ct.includes("image") ? `[image data ${r.status}]` : await r.text();
-          results.push({ url: url.replace(deviceUrl, ""), status: r.status, contentType: ct, body: text.slice(0, 300) });
+          const r = await auth.request(test.url, "POST", test.body, {"Content-Type": "application/json"});
+          const text = await r.text();
+          probes.push({ url: test.url.replace(deviceUrl, ""), method: "POST", body: test.body, status: r.status, response: text.slice(0, 500) });
         } catch (e) {
-          results.push({ url: url.replace(deviceUrl, ""), error: e.message });
+          probes.push({ url: test.url.replace(deviceUrl, ""), error: e.message });
         }
       }
-      return new Response(JSON.stringify({ results }), {
+
+      // Also try GET with different params  
+      const getTests = [
+        `${deviceUrl}/cgi-bin/AccessFace.cgi?action=list&channel=0`,
+        `${deviceUrl}/cgi-bin/AccessFace.cgi?action=list&channel=1`,
+        `${deviceUrl}/cgi-bin/faceRecognitionServer.cgi?action=list`,
+      ];
+      for (const url of getTests) {
+        try {
+          const r = await auth.request(url);
+          const text = await r.text();
+          probes.push({ url: url.replace(deviceUrl, ""), status: r.status, response: text.slice(0, 500) });
+        } catch (e) {
+          probes.push({ url: url.replace(deviceUrl, ""), error: e.message });
+        }
+      }
+
+      return new Response(JSON.stringify({ device: "SS 3532 MF W", results: probes }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
