@@ -79,24 +79,41 @@ serve(async (req) => {
     if (action === "probe") {
       const probes: any[] = [];
       
-      // AccessFace.cgi with Dahua condition.UserID format
-      const getTests = [
-        `${deviceUrl}/cgi-bin/AccessFace.cgi?action=list&condition.UserID=2`,
-        `${deviceUrl}/cgi-bin/AccessFace.cgi?action=list&condition.UserIDList[0].UserID=2`,
-        `${deviceUrl}/cgi-bin/AccessFace.cgi?action=list&UserID=2&FACEINDEX=0`,
-        `${deviceUrl}/cgi-bin/AccessFace.cgi?action=multiInsert`,
-        `${deviceUrl}/cgi-bin/AccessFace.cgi?action=insert`,
-        `${deviceUrl}/cgi-bin/recordUpdater.cgi?action=insert&name=AccessControlCard&UserID=test&CardNo=test&CardName=test&CardType=0&Doors[0]=0`,
+      // Try multipart POST for AccessFace.cgi (Dahua newer protocol)
+      const boundary = "----DahuaBoundary";
+      const multipartBody = `--${boundary}\r\nContent-Disposition: form-data; name="condition.UserID"\r\n\r\n2\r\n--${boundary}--\r\n`;
+      
+      const postMultipartTests = [
+        { url: `${deviceUrl}/cgi-bin/AccessFace.cgi?action=list`, ct: `multipart/form-data; boundary=${boundary}`, body: multipartBody },
+        { url: `${deviceUrl}/cgi-bin/AccessFace.cgi?action=list`, ct: `application/x-www-form-urlencoded`, body: "condition.UserID=2" },
       ];
-      for (const url of getTests) {
+      
+      for (const test of postMultipartTests) {
         try {
-          const r = await auth.request(url);
+          const r = await auth.request(test.url, "POST", test.body, {"Content-Type": test.ct});
           const ct = r.headers.get("content-type") || "";
-          const text = ct.includes("image") ? `[image ${r.status}]` : await r.text();
-          probes.push({ url: url.replace(deviceUrl, ""), status: r.status, ct, response: text.slice(0, 500) });
+          let text: string;
+          if (ct.includes("multipart") || ct.includes("image")) {
+            const data = await r.arrayBuffer();
+            text = `[binary data, ${data.byteLength} bytes, ct: ${ct}]`;
+          } else {
+            text = await r.text();
+          }
+          probes.push({ url: test.url.replace(deviceUrl, ""), method: "POST", reqCt: test.ct, status: r.status, resCt: ct, response: text.slice(0, 800) });
         } catch (e) {
-          probes.push({ url: url.replace(deviceUrl, ""), error: e.message });
+          probes.push({ url: test.url.replace(deviceUrl, ""), error: e.message });
         }
+      }
+
+      // Try fetching the web UI JS to find API endpoints
+      try {
+        const r = await auth.request(`${deviceUrl}/`);
+        const html = await r.text();
+        // Look for js files
+        const jsMatches = html.match(/src="([^"]+\.js)"/g) || [];
+        probes.push({ url: "/", status: r.status, jsFiles: jsMatches.slice(0, 10) });
+      } catch (e) {
+        probes.push({ url: "/", error: e.message });
       }
 
       return new Response(JSON.stringify({ device: "SS 3532 MF W", results: probes }), {
