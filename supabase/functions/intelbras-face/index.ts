@@ -141,32 +141,18 @@ serve(async (req) => {
       const photoBytes = new Uint8Array(await photoResp.arrayBuffer());
       const photoBase64 = base64Encode(photoBytes);
 
-      // Build multipart body for AccessFace.cgi insertMulti
-      const boundary = "----DahuaBoundary" + Date.now();
-      const encoder = new TextEncoder();
-      
-      const parts: Uint8Array[] = [];
-      // Part 1: UserID
-      parts.push(encoder.encode(
-        `--${boundary}\r\nContent-Disposition: form-data; name="FaceList[0].UserID"\r\n\r\n${personId}\r\n`
-      ));
-      // Part 2: Photo as JPEG binary
-      parts.push(encoder.encode(
-        `--${boundary}\r\nContent-Disposition: form-data; name="FaceList[0].PhotoData[0]"; filename="face.jpg"\r\nContent-Type: image/jpeg\r\n\r\n`
-      ));
-      parts.push(photoBytes);
-      parts.push(encoder.encode(`\r\n--${boundary}--\r\n`));
+      // Try JSON format with base64 photo (preferred by many Intelbras/Dahua models)
+      const jsonBody = JSON.stringify({
+        FaceList: [{
+          UserID: personId,
+          PhotoData: [photoBase64],
+        }],
+      });
 
-      const totalLen = parts.reduce((s, p) => s + p.length, 0);
-      const body = new Uint8Array(totalLen);
-      let offset = 0;
-      for (const p of parts) { body.set(p, offset); offset += p.length; }
-
-      // Try insertMulti with multipart
       const insertUrl = `${deviceUrl}/cgi-bin/AccessFace.cgi?action=insertMulti`;
-      console.log(`insertMulti (multipart): ${insertUrl}`);
-      const insertResp = await auth.request(insertUrl, "POST", body, {
-        "Content-Type": `multipart/form-data; boundary=${boundary}`,
+      console.log(`insertMulti (JSON): ${insertUrl}, body length: ${jsonBody.length}`);
+      const insertResp = await auth.request(insertUrl, "POST", jsonBody, {
+        "Content-Type": "application/json",
       });
       const insertText = await insertResp.text();
       console.log(`insertMulti response (${insertResp.status}): ${insertText.slice(0, 500)}`);
@@ -180,9 +166,9 @@ serve(async (req) => {
       // If exists, try updateMulti
       if (insertText.includes("Exist") || insertText.includes("exist") || insertText.includes("Already")) {
         const updateUrl = `${deviceUrl}/cgi-bin/AccessFace.cgi?action=updateMulti`;
-        console.log(`updateMulti: ${updateUrl}`);
-        const updateResp = await auth.request(updateUrl, "POST", body, {
-          "Content-Type": `multipart/form-data; boundary=${boundary}`,
+        console.log(`updateMulti (JSON): ${updateUrl}`);
+        const updateResp = await auth.request(updateUrl, "POST", jsonBody, {
+          "Content-Type": "application/json",
         });
         const updateText = await updateResp.text();
         console.log(`updateMulti response (${updateResp.status}): ${updateText.slice(0, 500)}`);
@@ -197,7 +183,20 @@ serve(async (req) => {
         });
       }
 
-      return new Response(JSON.stringify({ error: "Erro ao enviar foto", raw: insertText.slice(0, 300) }), {
+      // Fallback: try query-string style insert
+      const qsUrl = `${deviceUrl}/cgi-bin/AccessFace.cgi?action=insertMulti&FaceList[0].UserID=${encodeURIComponent(personId)}&FaceList[0].PhotoData[0]=${encodeURIComponent(photoBase64)}`;
+      console.log(`insertMulti (query-string fallback), url length: ${qsUrl.length}`);
+      const qsResp = await auth.request(qsUrl, "POST");
+      const qsText = await qsResp.text();
+      console.log(`insertMulti QS response (${qsResp.status}): ${qsText.slice(0, 500)}`);
+
+      if (qsResp.ok && !qsText.toLowerCase().includes("error")) {
+        return new Response(JSON.stringify({ success: true, message: "Foto enviada ao dispositivo!" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(JSON.stringify({ error: "Erro ao enviar foto", raw: insertText.slice(0, 300), qsRaw: qsText.slice(0, 300) }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
 
