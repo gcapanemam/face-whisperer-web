@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const roleLabels: Record<string, string> = {
@@ -20,11 +20,14 @@ const roleLabels: Record<string, string> = {
 
 export default function Users() {
   const [users, setUsers] = useState<any[]>([]);
+  const [classrooms, setClassrooms] = useState<any[]>([]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [role, setRole] = useState('teacher');
+  const [classroomId, setClassroomId] = useState('');
   const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
   const { toast } = useToast();
 
   const fetchUsers = async () => {
@@ -34,51 +37,70 @@ export default function Users() {
     const userIds = roles.map(r => r.user_id);
     const { data: profiles } = await supabase.from('profiles').select('*').in('user_id', userIds);
 
+    // Get classroom assignments for teachers
+    const { data: rooms } = await supabase.from('classrooms').select('id, name, teacher_user_id');
+
     const merged = roles.map(r => ({
       ...r,
       profile: profiles?.find(p => p.user_id === r.user_id),
+      classroom: rooms?.find(c => c.teacher_user_id === r.user_id),
     }));
     setUsers(merged);
   };
 
-  useEffect(() => { fetchUsers(); }, []);
+  const fetchClassrooms = async () => {
+    const { data } = await supabase.from('classrooms').select('id, name, teacher_user_id').order('name');
+    setClassrooms(data || []);
+  };
+
+  useEffect(() => {
+    fetchUsers();
+    fetchClassrooms();
+  }, []);
 
   const handleCreate = async () => {
-    // Create user via Supabase Auth
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { full_name: fullName } },
-    });
-
-    if (error) {
-      toast({ title: 'Erro', description: error.message, variant: 'destructive' });
+    if (!email || !password || !fullName) {
+      toast({ title: 'Erro', description: 'Preencha todos os campos obrigatórios.', variant: 'destructive' });
       return;
     }
 
-    if (data.user) {
-      // Assign role - need admin to insert
-      const { error: roleError } = await supabase.from('user_roles').insert({
-        user_id: data.user.id,
-        role: role as any,
+    setCreating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-user', {
+        body: {
+          email,
+          password,
+          full_name: fullName,
+          role,
+          classroom_id: role === 'teacher' ? classroomId || null : null,
+        },
       });
 
-      if (roleError) {
-        toast({ title: 'Usuário criado, mas erro ao atribuir perfil', description: roleError.message, variant: 'destructive' });
-      } else {
-        toast({ title: 'Usuário criado!' });
-      }
-    }
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
-    setEmail(''); setPassword(''); setFullName(''); setRole('teacher');
-    setOpen(false);
-    fetchUsers();
+      toast({ title: 'Usuário criado com sucesso!' });
+      setEmail(''); setPassword(''); setFullName(''); setRole('teacher'); setClassroomId('');
+      setOpen(false);
+      fetchUsers();
+      fetchClassrooms();
+    } catch (err: any) {
+      toast({ title: 'Erro ao criar usuário', description: err.message, variant: 'destructive' });
+    } finally {
+      setCreating(false);
+    }
   };
 
   const handleDelete = async (userId: string) => {
     await supabase.from('user_roles').delete().eq('user_id', userId);
+    // Also unlink from classroom
+    await supabase.from('classrooms').update({ teacher_user_id: null }).eq('teacher_user_id', userId);
     fetchUsers();
+    fetchClassrooms();
   };
+
+  // Classrooms without a teacher assigned (or current selection)
+  const availableClassrooms = classrooms.filter(c => !c.teacher_user_id);
 
   return (
     <div className="space-y-6">
@@ -108,7 +130,7 @@ export default function Users() {
               </div>
               <div className="space-y-2">
                 <Label>Perfil</Label>
-                <Select value={role} onValueChange={setRole}>
+                <Select value={role} onValueChange={(v) => { setRole(v); if (v !== 'teacher') setClassroomId(''); }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="admin">Administrador</SelectItem>
@@ -118,7 +140,30 @@ export default function Users() {
                   </SelectContent>
                 </Select>
               </div>
-              <Button onClick={handleCreate} className="w-full">Criar Usuário</Button>
+
+              {role === 'teacher' && (
+                <div className="space-y-2">
+                  <Label>Sala (opcional)</Label>
+                  <Select value={classroomId} onValueChange={setClassroomId}>
+                    <SelectTrigger><SelectValue placeholder="Vincular a uma sala" /></SelectTrigger>
+                    <SelectContent>
+                      {availableClassrooms.length === 0 ? (
+                        <div className="px-3 py-2 text-sm text-muted-foreground">Nenhuma sala disponível</div>
+                      ) : (
+                        availableClassrooms.map(c => (
+                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">A professora receberá notificações desta sala.</p>
+                </div>
+              )}
+
+              <Button onClick={handleCreate} className="w-full" disabled={creating}>
+                {creating && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
+                Criar Usuário
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -132,6 +177,7 @@ export default function Users() {
                 <TableHead>Nome</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Perfil</TableHead>
+                <TableHead>Sala</TableHead>
                 <TableHead className="w-12"></TableHead>
               </TableRow>
             </TableHeader>
@@ -143,6 +189,7 @@ export default function Users() {
                   <TableCell>
                     <Badge variant="secondary">{roleLabels[u.role] || u.role}</Badge>
                   </TableCell>
+                  <TableCell>{u.classroom?.name || '—'}</TableCell>
                   <TableCell>
                     <Button variant="ghost" size="icon" onClick={() => handleDelete(u.user_id)}>
                       <Trash2 className="h-4 w-4 text-destructive" />
@@ -152,7 +199,7 @@ export default function Users() {
               ))}
               {users.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                     Nenhum usuário cadastrado.
                   </TableCell>
                 </TableRow>
