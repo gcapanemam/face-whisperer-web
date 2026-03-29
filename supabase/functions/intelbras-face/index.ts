@@ -100,12 +100,58 @@ serve(async (req) => {
         });
       }
 
-      // Step 2: doFind to get actual face data
-      const doUrl = `${deviceUrl}/cgi-bin/AccessFace.cgi?action=doFind&token=${startData.Token}&count=1`;
-      console.log(`doFind: ${doUrl}`);
-      const doResp = await auth.request(doUrl);
-      const contentType = doResp.headers.get("content-type") || "";
-      console.log(`doFind response status: ${doResp.status}, content-type: ${contentType}`);
+      // Step 2: doFind - try multiple param formats
+      const doUrls = [
+        `${deviceUrl}/cgi-bin/AccessFace.cgi?action=doFind&Token=${startData.Token}&Offset=0&Count=1`,
+        `${deviceUrl}/cgi-bin/AccessFace.cgi?action=doFind&token=${startData.Token}&Offset=0&Count=10`,
+      ];
+
+      let doResp: Response | null = null;
+      let contentType = "";
+      
+      for (const doUrl of doUrls) {
+        console.log(`doFind: ${doUrl}`);
+        const resp = await auth.request(doUrl);
+        const ct = resp.headers.get("content-type") || "";
+        console.log(`doFind response status: ${resp.status}, ct: ${ct}`);
+        if (resp.ok || ct.includes("multipart") || ct.includes("image")) {
+          doResp = resp;
+          contentType = ct;
+          break;
+        }
+        const errText = await resp.text();
+        console.log(`doFind error: ${errText.slice(0, 200)}`);
+      }
+
+      // Also try JSON-RPC via POST
+      if (!doResp) {
+        const rpcBody = JSON.stringify({ method: "AccessFace.doFind", params: { Token: startData.Token, Offset: 0, Count: 1 } });
+        for (const rpcUrl of [`${deviceUrl}/RPC2`, `${deviceUrl}/cgi-bin/RPC2`, `${deviceUrl}/RPC`]) {
+          console.log(`RPC doFind: ${rpcUrl}`);
+          try {
+            const resp = await auth.request(rpcUrl, "POST", rpcBody, { "Content-Type": "application/json" });
+            const ct = resp.headers.get("content-type") || "";
+            console.log(`RPC response: ${resp.status}, ct: ${ct}`);
+            if (resp.ok) {
+              doResp = resp;
+              contentType = ct;
+              break;
+            }
+            const errText = await resp.text();
+            console.log(`RPC error: ${errText.slice(0, 200)}`);
+          } catch (e) {
+            console.log(`RPC error: ${e.message}`);
+          }
+        }
+      }
+
+      if (!doResp) {
+        // Cleanup
+        try { await auth.request(`${deviceUrl}/cgi-bin/AccessFace.cgi?action=stopFind&Token=${startData.Token}`); } catch {}
+        return new Response(JSON.stringify({ error: "startFind retornou dados, mas doFind falhou. O dispositivo pode não suportar download de faces via API." }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
 
       let photo: string | null = null;
 
