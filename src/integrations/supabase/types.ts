@@ -242,6 +242,7 @@ export type Database = {
           confirmed_at: string | null
           confirmed_by: string | null
           created_at: string
+          device_id: string | null
           guardian_id: string | null
           id: string
           intelbras_event_id: string | null
@@ -255,6 +256,7 @@ export type Database = {
           confirmed_at?: string | null
           confirmed_by?: string | null
           created_at?: string
+          device_id?: string | null
           guardian_id?: string | null
           id?: string
           intelbras_event_id?: string | null
@@ -268,6 +270,7 @@ export type Database = {
           confirmed_at?: string | null
           confirmed_by?: string | null
           created_at?: string
+          device_id?: string | null
           guardian_id?: string | null
           id?: string
           intelbras_event_id?: string | null
@@ -288,6 +291,13 @@ export type Database = {
             columns: ["classroom_id"]
             isOneToOne: false
             referencedRelation: "classrooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pickup_events_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
             referencedColumns: ["id"]
           },
           {
@@ -333,6 +343,7 @@ export type Database = {
         Row: {
           confidence: number | null
           created_at: string
+          device_id: string | null
           guardian_id: string | null
           id: string
           intelbras_event_id: string | null
@@ -344,6 +355,7 @@ export type Database = {
         Insert: {
           confidence?: number | null
           created_at?: string
+          device_id?: string | null
           guardian_id?: string | null
           id?: string
           intelbras_event_id?: string | null
@@ -355,6 +367,7 @@ export type Database = {
         Update: {
           confidence?: number | null
           created_at?: string
+          device_id?: string | null
           guardian_id?: string | null
           id?: string
           intelbras_event_id?: string | null
@@ -364,6 +377,13 @@ export type Database = {
           recognized?: boolean
         }
         Relationships: [
+          {
+            foreignKeyName: "recognition_log_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "recognition_log_guardian_id_fkey"
             columns: ["guardian_id"]
