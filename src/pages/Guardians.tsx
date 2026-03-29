@@ -39,6 +39,7 @@ export default function Guardians() {
   const [intelbrasPersons, setIntelbrasPersons] = useState<IntelbrasPerson[]>([]);
   const [loadingPersons, setLoadingPersons] = useState(false);
   const [personsOpen, setPersonsOpen] = useState(false);
+  const [syncingFace, setSyncingFace] = useState(false);
 
   const { toast } = useToast();
 
