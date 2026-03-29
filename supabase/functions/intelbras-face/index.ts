@@ -109,9 +109,8 @@ serve(async (req) => {
       try {
         const r = await auth.request(`${deviceUrl}/`);
         const html = await r.text();
-        // Look for js files
-        const jsMatches = html.match(/src="([^"]+\.js)"/g) || [];
-        probes.push({ url: "/", status: r.status, jsFiles: jsMatches.slice(0, 10) });
+        const scriptMatches = [...html.matchAll(/(src|href)="([^"]+\.(js|css))"/g)].map(m => m[2]);
+        probes.push({ url: "/", status: r.status, scripts: scriptMatches.slice(0, 20), htmlPreview: html.slice(0, 1500) });
       } catch (e) {
         probes.push({ url: "/", error: e.message });
       }
