@@ -16,21 +16,29 @@ export function ReceptionDashboard() {
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('all');
 
   const fetchEvents = async () => {
-    const { data } = await supabase
+    let query = supabase
       .from('pickup_events')
       .select('*, guardians(full_name), children(full_name), classrooms(name)')
       .gte('created_at', new Date().toISOString().split('T')[0])
       .order('created_at', { ascending: false })
       .limit(50);
+    if (selectedDeviceId !== 'all') {
+      query = query.eq('device_id', selectedDeviceId);
+    }
+    const { data } = await query;
     setEvents(data || []);
   };
 
   const fetchUnknown = async () => {
-    const { count } = await supabase
+    let query = supabase
       .from('recognition_log')
       .select('id', { count: 'exact', head: true })
       .eq('recognized', false)
       .gte('created_at', new Date().toISOString().split('T')[0]);
+    if (selectedDeviceId !== 'all') {
+      query = query.eq('device_id', selectedDeviceId);
+    }
+    const { count } = await query;
     setUnknownCount(count || 0);
   };
 
@@ -108,19 +116,17 @@ export function ReceptionDashboard() {
           <p className="text-muted-foreground">Feed ao vivo de reconhecimentos faciais</p>
         </div>
         <div className="flex items-center gap-2">
-          {devices.length > 1 && (
-            <Select value={selectedDeviceId} onValueChange={setSelectedDeviceId}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Dispositivo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                {devices.map(d => (
-                  <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
+          <Select value={selectedDeviceId} onValueChange={setSelectedDeviceId}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Dispositivo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os dispositivos</SelectItem>
+              {devices.map(d => (
+                <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button variant="outline" onClick={pollDevice} disabled={isPolling}>
             <RefreshCw className={`h-4 w-4 mr-1 ${isPolling ? 'animate-spin' : ''}`} />
             Atualizar
