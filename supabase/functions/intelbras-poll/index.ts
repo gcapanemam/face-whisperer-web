@@ -82,7 +82,20 @@ async function getDevices(supabase: any, deviceId?: string): Promise<DeviceConfi
     .select("id, device_url, username, password, name")
     .eq("enabled", true);
 
-  if (data && data.length > 0) return data;
+  if (data && data.length > 0) {
+    // If env credentials exist, use them as override for matching devices
+    const envUrl = Deno.env.get("INTELBRAS_DEVICE_URL")?.replace(/#.*$/, '').replace(/\/+$/, '') || "";
+    const envUsername = Deno.env.get("INTELBRAS_USERNAME") || "";
+    const envPassword = Deno.env.get("INTELBRAS_PASSWORD") || "";
+    
+    return data.map((d: any) => {
+      const cleanDevUrl = d.device_url.replace(/#.*$/, '').replace(/\/+$/, '');
+      if (envUrl && cleanDevUrl === envUrl && envUsername && envPassword) {
+        return { ...d, username: envUsername, password: envPassword };
+      }
+      return d;
+    });
+  }
   return getFallbackDevice();
 }
 
