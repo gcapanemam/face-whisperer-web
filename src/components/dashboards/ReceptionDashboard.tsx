@@ -30,11 +30,15 @@ export function ReceptionDashboard() {
   };
 
   const fetchUnknown = async () => {
-    const { count } = await supabase
+    let query = supabase
       .from('recognition_log')
       .select('id', { count: 'exact', head: true })
       .eq('recognized', false)
       .gte('created_at', new Date().toISOString().split('T')[0]);
+    if (selectedDeviceId !== 'all') {
+      query = query.eq('device_id', selectedDeviceId);
+    }
+    const { count } = await query;
     setUnknownCount(count || 0);
   };
 
