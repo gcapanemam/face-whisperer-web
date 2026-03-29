@@ -39,7 +39,11 @@ const teacherLinks = [
 const receptionLinks = [
   { title: 'Monitoramento', icon: MonitorSmartphone, path: '/dashboard' },
   { title: 'Histórico', icon: ClipboardList, path: '/reports' },
-];
+
+export function AppSidebar() {
+  const { role, profile, signOut } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const links = (() => {
     switch (role) {
