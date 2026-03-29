@@ -21,6 +21,15 @@ const adminLinks = [
   { title: 'Dispositivos', icon: Settings, path: '/devices' },
 ];
 
+const secretaryLinks = [
+  { title: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
+  { title: 'Salas', icon: School, path: '/classrooms' },
+  { title: 'Crianças', icon: Baby, path: '/children' },
+  { title: 'Responsáveis', icon: Users, path: '/guardians' },
+  { title: 'Relatórios', icon: ClipboardList, path: '/reports' },
+  { title: 'Monitoramento', icon: MonitorSmartphone, path: '/monitoring' },
+];
+
 const teacherLinks = [
   { title: 'Minha Sala', icon: LayoutDashboard, path: '/dashboard' },
   { title: 'Notificações', icon: Bell, path: '/notifications' },
@@ -32,16 +41,14 @@ const receptionLinks = [
   { title: 'Histórico', icon: ClipboardList, path: '/reports' },
 ];
 
-export function AppSidebar() {
-  const { role, profile, signOut } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
-
-  const links = role === 'admin' || role === 'secretary'
-    ? adminLinks
-    : role === 'teacher'
-    ? teacherLinks
-    : receptionLinks;
+  const getLinks = (role: string | null) => {
+    switch (role) {
+      case 'admin': return adminLinks;
+      case 'secretary': return secretaryLinks;
+      case 'teacher': return teacherLinks;
+      default: return receptionLinks;
+    }
+  };
 
   const initials = profile?.full_name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '?';
 
