@@ -196,11 +196,11 @@ export function ReceptionDashboard() {
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-base truncate">{ev.guardians?.full_name || 'Desconhecido'}</p>
                     <div className="flex items-center gap-2 mt-1">
-                      <Avatar className="h-10 w-10 border border-muted">
+                      <Avatar className="h-14 w-14 border-2 border-accent/20">
                         {ev.children?.photo_url ? (
                           <AvatarImage src={ev.children.photo_url} alt={ev.children.full_name} className="object-cover" />
                         ) : null}
-                        <AvatarFallback className="bg-muted text-muted-foreground text-xs">
+                        <AvatarFallback className="bg-accent/10 text-accent text-lg">
                           {ev.children?.full_name?.charAt(0) || '?'}
                         </AvatarFallback>
                       </Avatar>
