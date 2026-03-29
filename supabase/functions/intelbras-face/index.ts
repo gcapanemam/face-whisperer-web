@@ -157,6 +157,26 @@ serve(async (req) => {
         });
       }
 
+      // After successful upload, upsert guardian_devices link
+      const upsertGuardianDevice = async () => {
+        if (!deviceId || config.id === "env") return;
+        // Find guardian by intelbras_person_id
+        const { data: guardian } = await supabase
+          .from("guardians")
+          .select("id")
+          .eq("intelbras_person_id", personId)
+          .limit(1)
+          .single();
+        if (guardian) {
+          await supabase.from("guardian_devices").upsert({
+            guardian_id: guardian.id,
+            device_id: config.id,
+            intelbras_person_id: personId,
+            synced: true,
+          }, { onConflict: "guardian_id,device_id" });
+        }
+      };
+
       const optimizedPhotoUrl = (() => {
         try {
           const url = new URL(photoUrl);
