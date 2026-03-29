@@ -115,7 +115,7 @@ export default function Classrooms() {
             <CardContent>
               <p className="text-sm text-muted-foreground">{room.grade || 'Sem série'}</p>
               <p className="text-sm text-muted-foreground">
-                Professora: {room.profiles?.full_name || 'Não atribuída'}
+                Professora: {room.teacher_name || 'Não atribuída'}
               </p>
             </CardContent>
           </Card>
