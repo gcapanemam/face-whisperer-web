@@ -33,6 +33,7 @@ class DigestAuth {
     const realm = wwwAuth.match(/realm="([^"]+)"/)?.[1] || "";
     const nonce = wwwAuth.match(/nonce="([^"]+)"/)?.[1] || "";
     const qop = wwwAuth.match(/qop="([^"]+)"/)?.[1] || "";
+    const opaque = wwwAuth.match(/opaque="([^"]+)"/)?.[1] || "";
 
     this.nc++;
     const ncStr = this.nc.toString(16).padStart(8, "0");
@@ -45,9 +46,9 @@ class DigestAuth {
       ? this.md5(`${ha1}:${nonce}:${ncStr}:${cnonce}:${qop.split(",")[0]}:${ha2}`)
       : this.md5(`${ha1}:${nonce}:${ha2}`);
 
-    const authHeader = `Digest username="${this.username}", realm="${realm}", nonce="${nonce}", uri="${uri}", response="${response}"${
-      qop ? `, qop=${qop.split(",")[0]}, nc=${ncStr}, cnonce="${cnonce}"` : ""
-    }`;
+    let authHeader = `Digest username="${this.username}", realm="${realm}", nonce="${nonce}", uri="${uri}", response="${response}"`;
+    if (qop) authHeader += `, qop=${qop.split(",")[0]}, nc=${ncStr}, cnonce="${cnonce}"`;
+    if (opaque) authHeader += `, opaque="${opaque}"`;
 
     await firstResponse.text();
     return fetch(url, { method, headers: { Authorization: authHeader, ...(extraHeaders || {}) }, body });
