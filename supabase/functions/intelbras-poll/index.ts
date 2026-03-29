@@ -246,6 +246,7 @@ serve(async (req) => {
       eventsFound: events.length,
       eventsProcessed: processedCount,
       pickupEventsCreated,
+      debugInfo,
       timestamp: new Date().toISOString(),
     };
 
