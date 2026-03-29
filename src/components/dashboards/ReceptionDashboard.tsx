@@ -61,7 +61,7 @@ export function ReceptionDashboard() {
   useEffect(() => {
     fetchEvents();
     fetchUnknown();
-    // Initial poll
+    fetchDevices();
     pollDevice();
 
     // Auto-poll every 10 seconds
