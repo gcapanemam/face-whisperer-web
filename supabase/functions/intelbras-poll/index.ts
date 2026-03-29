@@ -123,6 +123,21 @@ async function pollDevice(device: DeviceConfig, supabase: any, testOnly: boolean
   ];
 
   try {
+    // Quick diagnostic: test first endpoint auth details
+    const diagUrl = `${cleanUrl}${endpoints[0]}`;
+    try {
+      const diagResp = await fetch(diagUrl, { method: "GET", redirect: "manual" });
+      const wwwAuth = diagResp.headers.get("www-authenticate");
+      debugInfo._authDiag = {
+        firstStatus: diagResp.status,
+        hasWwwAuth: !!wwwAuth,
+        wwwAuth: wwwAuth?.slice(0, 300),
+      };
+      await diagResp.text();
+    } catch (e) {
+      debugInfo._authDiag = { error: e.message };
+    }
+
     for (const endpoint of endpoints) {
       const url = `${cleanUrl}${endpoint}`;
       console.log(`[${device.name}] Trying: ${url}`);
