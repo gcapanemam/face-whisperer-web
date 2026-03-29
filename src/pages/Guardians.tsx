@@ -95,6 +95,57 @@ export default function Guardians() {
     toast({ title: `Pessoa "${person.userId}" selecionada` });
   };
 
+  const handleSendFaceToDevice = async () => {
+    if (!intelbrasPersonId) {
+      toast({ title: 'Informe o ID da pessoa no dispositivo', variant: 'destructive' });
+      return;
+    }
+    if (!photoUrl) {
+      toast({ title: 'Adicione uma foto antes de enviar ao dispositivo', variant: 'destructive' });
+      return;
+    }
+    setSyncingFace(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('intelbras-face', {
+        body: { action: 'set', personId: intelbrasPersonId, photoUrl },
+      });
+      if (error) throw error;
+      if (data?.success) {
+        toast({ title: 'Foto enviada ao dispositivo!' });
+      } else {
+        toast({ title: 'Erro ao enviar', description: data?.error || 'Erro desconhecido', variant: 'destructive' });
+      }
+    } catch (err: any) {
+      toast({ title: 'Erro ao enviar foto', description: err.message, variant: 'destructive' });
+    } finally {
+      setSyncingFace(false);
+    }
+  };
+
+  const handleGetFaceFromDevice = async () => {
+    if (!intelbrasPersonId) {
+      toast({ title: 'Informe o ID da pessoa no dispositivo', variant: 'destructive' });
+      return;
+    }
+    setSyncingFace(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('intelbras-face', {
+        body: { action: 'get', personId: intelbrasPersonId },
+      });
+      if (error) throw error;
+      if (data?.success && data?.photo) {
+        setPhotoUrl(data.photo);
+        toast({ title: 'Foto recebida do dispositivo!' });
+      } else {
+        toast({ title: 'Foto não encontrada no dispositivo', description: data?.error, variant: 'destructive' });
+      }
+    } catch (err: any) {
+      toast({ title: 'Erro ao buscar foto', description: err.message, variant: 'destructive' });
+    } finally {
+      setSyncingFace(false);
+    }
+  };
+
   const handleSave = async () => {
     if (editId) {
       const { error } = await supabase.from('guardians').update({
