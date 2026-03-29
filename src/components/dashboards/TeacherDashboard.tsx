@@ -54,7 +54,7 @@ export function TeacherDashboard() {
         // Fetch full data
         supabase
           .from('pickup_events')
-          .select('*, guardians(full_name, photo_url), children(full_name)')
+          .select('*, guardians(full_name, photo_url), children(full_name, photo_url)')
           .eq('id', newEvent.id)
           .single()
           .then(({ data }) => {
