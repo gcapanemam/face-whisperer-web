@@ -157,6 +157,48 @@ export type Database = {
           },
         ]
       }
+      guardian_devices: {
+        Row: {
+          created_at: string
+          device_id: string
+          guardian_id: string
+          id: string
+          intelbras_person_id: string
+          synced: boolean
+        }
+        Insert: {
+          created_at?: string
+          device_id: string
+          guardian_id: string
+          id?: string
+          intelbras_person_id: string
+          synced?: boolean
+        }
+        Update: {
+          created_at?: string
+          device_id?: string
+          guardian_id?: string
+          id?: string
+          intelbras_person_id?: string
+          synced?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guardian_devices_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guardian_devices_guardian_id_fkey"
+            columns: ["guardian_id"]
+            isOneToOne: false
+            referencedRelation: "guardians"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       guardians: {
         Row: {
           cpf: string | null
