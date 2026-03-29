@@ -141,22 +141,18 @@ export default function Users() {
                 </Select>
               </div>
 
-              {role === 'teacher' && (
+              {role === 'teacher' && availableClassrooms.length > 0 && (
                 <div className="space-y-2">
                   <Label>Sala (opcional)</Label>
                   <Select value={classroomId} onValueChange={setClassroomId}>
-                    <SelectTrigger><SelectValue placeholder="Vincular a uma sala" /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Vincular depois" /></SelectTrigger>
                     <SelectContent>
-                      {availableClassrooms.length === 0 ? (
-                        <div className="px-3 py-2 text-sm text-muted-foreground">Nenhuma sala disponível</div>
-                      ) : (
-                        availableClassrooms.map(c => (
-                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                        ))
-                      )}
+                      {availableClassrooms.map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">A professora receberá notificações desta sala.</p>
+                  <p className="text-xs text-muted-foreground">Você pode vincular a sala depois em "Salas".</p>
                 </div>
               )}
 
