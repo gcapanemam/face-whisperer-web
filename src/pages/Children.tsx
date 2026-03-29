@@ -7,8 +7,10 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Plus, Trash2, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { PhotoUpload } from '@/components/PhotoUpload';
 
 export default function Children() {
   const [children, setChildren] = useState<any[]>([]);
@@ -16,6 +18,7 @@ export default function Children() {
   const [search, setSearch] = useState('');
   const [name, setName] = useState('');
   const [classroomId, setClassroomId] = useState('');
+  const [photoUrl, setPhotoUrl] = useState('');
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
 
@@ -34,12 +37,13 @@ export default function Children() {
     const { error } = await supabase.from('children').insert({
       full_name: name,
       classroom_id: classroomId || null,
+      photo_url: photoUrl || null,
     });
     if (error) {
       toast({ title: 'Erro', description: error.message, variant: 'destructive' });
     } else {
       toast({ title: 'Criança cadastrada!' });
-      setName(''); setClassroomId(''); setOpen(false);
+      setName(''); setClassroomId(''); setPhotoUrl(''); setOpen(false);
       fetchData();
     }
   };
@@ -65,6 +69,15 @@ export default function Children() {
           <DialogContent>
             <DialogHeader><DialogTitle>Cadastrar Criança</DialogTitle></DialogHeader>
             <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Foto</Label>
+                <PhotoUpload
+                  folder="children"
+                  onUploaded={setPhotoUrl}
+                  name={name}
+                  currentUrl={photoUrl || null}
+                />
+              </div>
               <div className="space-y-2">
                 <Label>Nome Completo</Label>
                 <Input value={name} onChange={e => setName(e.target.value)} placeholder="Nome da criança" />
@@ -96,6 +109,7 @@ export default function Children() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-12"></TableHead>
                 <TableHead>Nome</TableHead>
                 <TableHead>Sala</TableHead>
                 <TableHead className="w-12"></TableHead>
@@ -104,6 +118,14 @@ export default function Children() {
             <TableBody>
               {filtered.map(child => (
                 <TableRow key={child.id}>
+                  <TableCell>
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src={child.photo_url || undefined} />
+                      <AvatarFallback className="text-xs bg-secondary">
+                        {child.full_name[0]}
+                      </AvatarFallback>
+                    </Avatar>
+                  </TableCell>
                   <TableCell className="font-medium">{child.full_name}</TableCell>
                   <TableCell>{child.classrooms?.name || '—'}</TableCell>
                   <TableCell>
@@ -115,7 +137,7 @@ export default function Children() {
               ))}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
                     Nenhuma criança encontrada.
                   </TableCell>
                 </TableRow>
