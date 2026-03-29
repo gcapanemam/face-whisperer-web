@@ -252,9 +252,9 @@ export default function Guardians() {
                         {syncingFace ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Upload className="h-3 w-3 mr-1" />}
                         Enviar foto ao dispositivo
                       </Button>
-                      <Button type="button" variant="outline" size="sm" onClick={handleGetFaceFromDevice} disabled={syncingFace}>
-                        {syncingFace ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Download className="h-3 w-3 mr-1" />}
-                        Buscar foto do dispositivo
+                      <Button type="button" variant="outline" size="sm" onClick={handleCheckFaceOnDevice} disabled={syncingFace}>
+                        {syncingFace ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <CheckCircle className="h-3 w-3 mr-1" />}
+                        Verificar face no dispositivo
                       </Button>
                     </div>
                   </div>
