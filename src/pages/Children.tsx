@@ -12,6 +12,7 @@ import { Plus, Trash2, Search, Pencil } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PhotoUpload } from '@/components/PhotoUpload';
 import { ImportExcel } from '@/components/ImportExcel';
+import { ExportExcel } from '@/components/ExportExcel';
 
 export default function Children() {
   const [children, setChildren] = useState<any[]>([]);
