@@ -287,6 +287,17 @@ export default function Guardians() {
           <p className="text-muted-foreground">{guardians.length} cadastrados</p>
         </div>
         <div className="flex gap-2">
+        <ExportExcel
+          getData={() => guardians.map(g => ({ full_name: g.full_name, phone: g.phone || '', cpf: g.cpf || '', email: g.email || '' }))}
+          columns={[
+            { key: 'full_name', header: 'Nome' },
+            { key: 'phone', header: 'Telefone' },
+            { key: 'cpf', header: 'CPF' },
+            { key: 'email', header: 'Email' },
+          ]}
+          filename="responsaveis"
+          buttonLabel="Exportar Responsáveis"
+        />
         <ImportExcel
           buttonLabel="Importar Responsáveis"
           fields={[

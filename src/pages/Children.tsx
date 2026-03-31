@@ -91,6 +91,15 @@ export default function Children() {
           <p className="text-muted-foreground">{children.length} cadastradas</p>
         </div>
         <div className="flex gap-2">
+        <ExportExcel
+          getData={() => children.map(c => ({ full_name: c.full_name, classroom: c.classrooms?.name || '' }))}
+          columns={[
+            { key: 'full_name', header: 'Nome' },
+            { key: 'classroom', header: 'Sala' },
+          ]}
+          filename="criancas"
+          buttonLabel="Exportar Crianças"
+        />
         <ImportExcel
           buttonLabel="Importar Crianças"
           fields={[
