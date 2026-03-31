@@ -12,6 +12,7 @@ import { Plus, Trash2, Search, Pencil } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PhotoUpload } from '@/components/PhotoUpload';
 import { ImportExcel } from '@/components/ImportExcel';
+import { ExportExcel } from '@/components/ExportExcel';
 
 export default function Children() {
   const [children, setChildren] = useState<any[]>([]);
@@ -90,6 +91,15 @@ export default function Children() {
           <p className="text-muted-foreground">{children.length} cadastradas</p>
         </div>
         <div className="flex gap-2">
+        <ExportExcel
+          getData={() => children.map(c => ({ full_name: c.full_name, classroom: c.classrooms?.name || '' }))}
+          columns={[
+            { key: 'full_name', header: 'Nome' },
+            { key: 'classroom', header: 'Sala' },
+          ]}
+          filename="criancas"
+          buttonLabel="Exportar Crianças"
+        />
         <ImportExcel
           buttonLabel="Importar Crianças"
           fields={[

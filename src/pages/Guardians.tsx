@@ -14,6 +14,7 @@ import { Plus, Trash2, Search, Link, ScanFace, Loader2, RefreshCw, Pencil, Uploa
 import { useToast } from '@/hooks/use-toast';
 import { PhotoUpload } from '@/components/PhotoUpload';
 import { ImportExcel } from '@/components/ImportExcel';
+import { ExportExcel } from '@/components/ExportExcel';
 
 interface IntelbrasPerson {
   userId: string;
@@ -286,6 +287,17 @@ export default function Guardians() {
           <p className="text-muted-foreground">{guardians.length} cadastrados</p>
         </div>
         <div className="flex gap-2">
+        <ExportExcel
+          getData={() => guardians.map(g => ({ full_name: g.full_name, phone: g.phone || '', cpf: g.cpf || '', email: g.email || '' }))}
+          columns={[
+            { key: 'full_name', header: 'Nome' },
+            { key: 'phone', header: 'Telefone' },
+            { key: 'cpf', header: 'CPF' },
+            { key: 'email', header: 'Email' },
+          ]}
+          filename="responsaveis"
+          buttonLabel="Exportar Responsáveis"
+        />
         <ImportExcel
           buttonLabel="Importar Responsáveis"
           fields={[

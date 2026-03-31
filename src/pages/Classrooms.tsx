@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Plus, School, Trash2, Pencil } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { ImportExcel } from '@/components/ImportExcel';
+import { ExportExcel } from '@/components/ExportExcel';
 
 export default function Classrooms() {
   const [classrooms, setClassrooms] = useState<any[]>([]);
@@ -94,6 +95,17 @@ export default function Classrooms() {
           <h1 className="font-display text-2xl font-bold">Salas</h1>
           <p className="text-muted-foreground">Gerenciar salas e turmas</p>
         </div>
+        <div className="flex gap-2">
+        <ExportExcel
+          getData={() => classrooms.map(c => ({ name: c.name, grade: c.grade || '', teacher: (c as any).teacher_name || '' }))}
+          columns={[
+            { key: 'name', header: 'Nome' },
+            { key: 'grade', header: 'Série/Turma' },
+            { key: 'teacher', header: 'Professor' },
+          ]}
+          filename="salas"
+          buttonLabel="Exportar Salas"
+        />
         <ImportExcel
           buttonLabel="Importar Salas"
           fields={[
@@ -141,6 +153,7 @@ export default function Classrooms() {
             </div>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
