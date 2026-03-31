@@ -14,6 +14,7 @@ import { Plus, Trash2, Search, Link, ScanFace, Loader2, RefreshCw, Pencil, Uploa
 import { useToast } from '@/hooks/use-toast';
 import { PhotoUpload } from '@/components/PhotoUpload';
 import { ImportExcel } from '@/components/ImportExcel';
+import { ExportExcel } from '@/components/ExportExcel';
 
 interface IntelbrasPerson {
   userId: string;
