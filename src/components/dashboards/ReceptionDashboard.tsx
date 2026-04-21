@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { MonitorSmartphone, AlertTriangle, CheckCircle, RefreshCw, Wifi, WifiOff, User } from 'lucide-react';
+import { MonitorSmartphone, AlertTriangle, CheckCircle, RefreshCw, Wifi, WifiOff, User, Radar } from 'lucide-react';
 
 export function ReceptionDashboard() {
   const [events, setEvents] = useState<any[]>([]);
@@ -103,10 +103,11 @@ export function ReceptionDashboard() {
   const deviceStatusConfig = {
     online: { label: 'Online', icon: Wifi, class: 'text-accent' },
     offline: { label: 'Offline', icon: WifiOff, class: 'text-destructive' },
-    polling: { label: 'Consultando...', icon: RefreshCw, class: 'text-primary animate-spin' },
-    unknown: { label: 'Verificando...', icon: RefreshCw, class: 'text-muted-foreground animate-spin' },
+    polling: { label: 'Consultando', icon: Radar, class: 'text-primary' },
+    unknown: { label: 'Verificando', icon: Radar, class: 'text-primary' },
   };
 
+  const isSearching = deviceStatus === 'polling' || deviceStatus === 'unknown';
   const DeviceIcon = deviceStatusConfig[deviceStatus].icon;
 
   return (
@@ -136,13 +137,18 @@ export function ReceptionDashboard() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <Card className={isSearching ? 'relative overflow-hidden border-primary/40' : ''}>
+          {isSearching && (
+            <div className="absolute inset-0 gradient-shift pointer-events-none" aria-hidden="true" />
+          )}
+          <CardHeader className="flex flex-row items-center justify-between pb-2 relative">
             <CardTitle className="text-sm font-medium text-muted-foreground">Dispositivo Intelbras</CardTitle>
-            <DeviceIcon className={`h-5 w-5 ${deviceStatusConfig[deviceStatus].class}`} />
+            <div className={`relative flex items-center justify-center h-8 w-8 rounded-full ${isSearching ? 'radar-scan bg-primary/10' : ''}`}>
+              <DeviceIcon className={`h-5 w-5 ${deviceStatusConfig[deviceStatus].class} ${isSearching ? 'radar-sweep' : ''}`} />
+            </div>
           </CardHeader>
-          <CardContent>
-            <p className={`text-lg font-bold font-display ${deviceStatusConfig[deviceStatus].class}`}>
+          <CardContent className="relative">
+            <p className={`text-lg font-bold font-display ${deviceStatusConfig[deviceStatus].class} ${isSearching ? 'searching-dots' : ''}`}>
               {deviceStatusConfig[deviceStatus].label}
             </p>
             {lastPoll && <p className="text-xs text-muted-foreground mt-1">Última consulta: {lastPoll}</p>}
