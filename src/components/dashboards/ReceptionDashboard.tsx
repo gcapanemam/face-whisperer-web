@@ -15,6 +15,21 @@ export function ReceptionDashboard() {
   const [isPolling, setIsPolling] = useState(false);
   const [devices, setDevices] = useState<any[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('all');
+  const [allowedClassroomIds, setAllowedClassroomIds] = useState<string[]>([]);
+  const [allowedClassroomNames, setAllowedClassroomNames] = useState<string[]>([]);
+
+  const fetchAllowedClassrooms = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data } = await supabase
+      .from('monitor_classrooms')
+      .select('classroom_id, classrooms(name)')
+      .eq('user_id', user.id);
+    const ids = (data || []).map((r: any) => r.classroom_id);
+    const names = (data || []).map((r: any) => r.classrooms?.name).filter(Boolean);
+    setAllowedClassroomIds(ids);
+    setAllowedClassroomNames(names);
+  };
 
   const fetchEvents = async () => {
     let query = supabase
@@ -25,6 +40,9 @@ export function ReceptionDashboard() {
       .limit(50);
     if (selectedDeviceId !== 'all') {
       query = query.eq('device_id', selectedDeviceId);
+    }
+    if (allowedClassroomIds.length > 0) {
+      query = query.in('classroom_id', allowedClassroomIds);
     }
     const { data } = await query;
     setEvents(data || []);
