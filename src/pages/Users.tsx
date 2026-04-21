@@ -241,17 +241,26 @@ export default function Users() {
                 <TableHead>Nome</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Perfil</TableHead>
-                <TableHead>Sala</TableHead>
+                <TableHead>Sala(s)</TableHead>
                 <TableHead className="w-24">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {users.map(u => (
+              {users.map(u => {
+                const monitorNames = (u.monitorClassroomIds || [])
+                  .map((id: string) => classrooms.find(c => c.id === id)?.name)
+                  .filter(Boolean);
+                let salaCell = '—';
+                if (u.role === 'teacher') salaCell = u.classroom?.name || '—';
+                else if (u.role === 'reception' || u.role === 'secretary') {
+                  salaCell = monitorNames.length > 0 ? monitorNames.join(', ') : 'Todas';
+                }
+                return (
                 <TableRow key={u.user_id}>
                   <TableCell className="font-medium">{u.profile?.full_name || '—'}</TableCell>
                   <TableCell>{u.profile?.email || '—'}</TableCell>
                   <TableCell><Badge variant="secondary">{roleLabels[u.role] || u.role}</Badge></TableCell>
-                  <TableCell>{u.classroom?.name || '—'}</TableCell>
+                  <TableCell className="text-sm">{salaCell}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
                       <Button variant="ghost" size="icon" onClick={() => openEdit(u)}>
