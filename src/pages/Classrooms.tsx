@@ -201,9 +201,17 @@ export default function Classrooms() {
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">{room.grade || 'Sem série'}</p>
-              <p className="text-sm text-muted-foreground">
-                Professora: {room.teacher_name || 'Não atribuída'}
-              </p>
+              <div className="mt-3 flex items-center gap-2">
+                <Avatar className="h-9 w-9">
+                  <AvatarImage src={room.teacher_avatar || undefined} alt={room.teacher_name || 'Professora'} />
+                  <AvatarFallback className="text-xs bg-secondary">
+                    {room.teacher_name
+                      ? room.teacher_name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
+                      : '?'}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-sm">{room.teacher_name || 'Não atribuída'}</span>
+              </div>
             </CardContent>
           </Card>
         ))}
