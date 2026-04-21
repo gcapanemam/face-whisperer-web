@@ -57,7 +57,7 @@ export default function Users() {
   useEffect(() => { fetchUsers(); fetchClassrooms(); }, []);
 
   const resetForm = () => {
-    setEmail(''); setPassword(''); setFullName(''); setRole('teacher'); setClassroomId(''); setEditUserId(null);
+    setEmail(''); setPassword(''); setFullName(''); setRole('teacher'); setClassroomId(''); setMonitorClassroomIds([]); setEditUserId(null);
   };
 
   const openEdit = (u: any) => {
@@ -67,7 +67,17 @@ export default function Users() {
     setPassword('');
     setRole(u.role);
     setClassroomId(u.classroom?.id || '');
+    setMonitorClassroomIds(u.monitorClassroomIds || []);
     setOpen(true);
+  };
+
+  const syncMonitorClassrooms = async (userId: string, ids: string[]) => {
+    await supabase.from('monitor_classrooms').delete().eq('user_id', userId);
+    if (ids.length > 0) {
+      await supabase.from('monitor_classrooms').insert(
+        ids.map(classroom_id => ({ user_id: userId, classroom_id }))
+      );
+    }
   };
 
   const handleSave = async () => {
@@ -84,6 +94,12 @@ export default function Users() {
       await supabase.from('classrooms').update({ teacher_user_id: null }).eq('teacher_user_id', editUserId);
       if (role === 'teacher' && classroomId) {
         await supabase.from('classrooms').update({ teacher_user_id: editUserId }).eq('id', classroomId);
+      }
+      // Sync monitor classrooms (reception/secretary)
+      if (role === 'reception' || role === 'secretary') {
+        await syncMonitorClassrooms(editUserId, monitorClassroomIds);
+      } else {
+        await supabase.from('monitor_classrooms').delete().eq('user_id', editUserId);
       }
       toast({ title: 'Usuário atualizado!' });
       resetForm(); setOpen(false); fetchUsers(); fetchClassrooms();
@@ -102,6 +118,10 @@ export default function Users() {
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
+      const newUserId = data?.user?.id || data?.userId;
+      if (newUserId && (role === 'reception' || role === 'secretary') && monitorClassroomIds.length > 0) {
+        await syncMonitorClassrooms(newUserId, monitorClassroomIds);
+      }
       toast({ title: 'Usuário criado com sucesso!' });
       resetForm(); setOpen(false); fetchUsers(); fetchClassrooms();
     } catch (err: any) {
@@ -114,7 +134,14 @@ export default function Users() {
   const handleDelete = async (userId: string) => {
     await supabase.from('user_roles').delete().eq('user_id', userId);
     await supabase.from('classrooms').update({ teacher_user_id: null }).eq('teacher_user_id', userId);
+    await supabase.from('monitor_classrooms').delete().eq('user_id', userId);
     fetchUsers(); fetchClassrooms();
+  };
+
+  const toggleMonitorClassroom = (id: string) => {
+    setMonitorClassroomIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
   };
 
   const availableClassrooms = classrooms.filter(c => !c.teacher_user_id || c.teacher_user_id === editUserId);
