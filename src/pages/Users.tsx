@@ -272,7 +272,8 @@ export default function Users() {
                     </div>
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
               {users.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-muted-foreground py-8">Nenhum usuário cadastrado.</TableCell>
