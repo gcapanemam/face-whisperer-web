@@ -178,7 +178,7 @@ export default function Users() {
               )}
               <div className="space-y-2">
                 <Label>Perfil</Label>
-                <Select value={role} onValueChange={(v) => { setRole(v); if (v !== 'teacher') setClassroomId(''); }}>
+                <Select value={role} onValueChange={(v) => { setRole(v); if (v !== 'teacher') setClassroomId(''); if (v !== 'reception' && v !== 'secretary') setMonitorClassroomIds([]); }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="admin">Administrador</SelectItem>
@@ -200,6 +200,27 @@ export default function Users() {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+              )}
+
+              {(role === 'reception' || role === 'secretary') && (
+                <div className="space-y-2">
+                  <Label>Salas que irá monitorar</Label>
+                  <p className="text-xs text-muted-foreground">Deixe vazio para monitorar todas as salas.</p>
+                  <div className="max-h-48 overflow-y-auto rounded-md border p-3 space-y-2">
+                    {classrooms.length === 0 && (
+                      <p className="text-sm text-muted-foreground">Nenhuma sala cadastrada.</p>
+                    )}
+                    {classrooms.map(c => (
+                      <label key={c.id} className="flex items-center gap-2 cursor-pointer">
+                        <Checkbox
+                          checked={monitorClassroomIds.includes(c.id)}
+                          onCheckedChange={() => toggleMonitorClassroom(c.id)}
+                        />
+                        <span className="text-sm">{c.name}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
               )}
 
