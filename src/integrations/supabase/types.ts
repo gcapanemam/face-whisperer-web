@@ -235,6 +235,35 @@ export type Database = {
         }
         Relationships: []
       }
+      monitor_classrooms: {
+        Row: {
+          classroom_id: string
+          created_at: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          classroom_id: string
+          created_at?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          classroom_id?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "monitor_classrooms_classroom_id_fkey"
+            columns: ["classroom_id"]
+            isOneToOne: false
+            referencedRelation: "classrooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pickup_events: {
         Row: {
           child_id: string | null
