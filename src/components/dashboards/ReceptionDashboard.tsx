@@ -139,6 +139,11 @@ export function ReceptionDashboard() {
         <div>
           <h1 className="font-display text-2xl font-bold">Monitoramento</h1>
           <p className="text-muted-foreground">Feed ao vivo de reconhecimentos faciais</p>
+          {allowedClassroomNames.length > 0 && (
+            <p className="text-xs text-primary mt-1">
+              Filtrado por sala(s): {allowedClassroomNames.join(', ')}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Select value={selectedDeviceId} onValueChange={setSelectedDeviceId}>
