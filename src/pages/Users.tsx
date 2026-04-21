@@ -27,6 +27,7 @@ export default function Users() {
   const [fullName, setFullName] = useState('');
   const [role, setRole] = useState('teacher');
   const [classroomId, setClassroomId] = useState('');
+  const [monitorClassroomIds, setMonitorClassroomIds] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [editUserId, setEditUserId] = useState<string | null>(null);
@@ -38,10 +39,12 @@ export default function Users() {
     const userIds = roles.map(r => r.user_id);
     const { data: profiles } = await supabase.from('profiles').select('*').in('user_id', userIds);
     const { data: rooms } = await supabase.from('classrooms').select('id, name, teacher_user_id');
+    const { data: monitors } = await supabase.from('monitor_classrooms').select('user_id, classroom_id');
     const merged = roles.map(r => ({
       ...r,
       profile: profiles?.find(p => p.user_id === r.user_id),
       classroom: rooms?.find(c => c.teacher_user_id === r.user_id),
+      monitorClassroomIds: (monitors || []).filter(m => m.user_id === r.user_id).map(m => m.classroom_id),
     }));
     setUsers(merged);
   };
