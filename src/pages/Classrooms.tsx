@@ -201,16 +201,16 @@ export default function Classrooms() {
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">{room.grade || 'Sem série'}</p>
-              <div className="mt-3 flex items-center gap-2">
-                <Avatar className="h-9 w-9">
-                  <AvatarImage src={room.teacher_avatar || undefined} alt={room.teacher_name || 'Professora'} />
-                  <AvatarFallback className="text-xs bg-secondary">
+              <div className="mt-4 flex flex-col items-center gap-2">
+                <Avatar className="h-24 w-24 ring-2 ring-primary/20">
+                  <AvatarImage src={room.teacher_avatar || undefined} alt={room.teacher_name || 'Professora'} className="object-cover" />
+                  <AvatarFallback className="text-xl bg-secondary">
                     {room.teacher_name
                       ? room.teacher_name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
                       : '?'}
                   </AvatarFallback>
                 </Avatar>
-                <span className="text-sm">{room.teacher_name || 'Não atribuída'}</span>
+                <span className="text-sm font-medium text-center">{room.teacher_name || 'Não atribuída'}</span>
               </div>
             </CardContent>
           </Card>
