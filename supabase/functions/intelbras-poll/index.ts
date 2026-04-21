@@ -22,8 +22,8 @@ class DigestAuth {
     return createHash("md5").update(str).digest("hex");
   }
 
-  async authenticate(url: string, method: string = "GET"): Promise<Response> {
-    const firstResponse = await fetch(url, { method, redirect: "manual" });
+  async authenticate(url: string, method: string = "GET", timeoutMs = 5000): Promise<Response> {
+    const firstResponse = await fetch(url, { method, redirect: "manual", signal: AbortSignal.timeout(timeoutMs) });
     if (firstResponse.status !== 401) return firstResponse;
 
     const wwwAuth = firstResponse.headers.get("www-authenticate");
@@ -54,7 +54,7 @@ class DigestAuth {
     if (opaque) authHeader += `, opaque="${opaque}"`;
 
     await firstResponse.text();
-    return fetch(url, { method, headers: { Authorization: authHeader } });
+    return fetch(url, { method, headers: { Authorization: authHeader }, signal: AbortSignal.timeout(timeoutMs) });
   }
 }
 
