@@ -153,6 +153,28 @@ export default function Classrooms() {
                   </SelectContent>
                 </Select>
               </div>
+              {teacherId && (
+                <div className="space-y-2 rounded-lg border p-3">
+                  <Label className="text-sm">Foto da Professora</Label>
+                  <PhotoUpload
+                    currentUrl={teachers.find(t => t.user_id === teacherId)?.avatar_url}
+                    folder="teachers"
+                    name={teachers.find(t => t.user_id === teacherId)?.full_name}
+                    onUploaded={async (url) => {
+                      const { error } = await supabase
+                        .from('profiles')
+                        .update({ avatar_url: url || null })
+                        .eq('user_id', teacherId);
+                      if (error) {
+                        toast({ title: 'Erro', description: error.message, variant: 'destructive' });
+                      } else {
+                        setTeachers(prev => prev.map(t => t.user_id === teacherId ? { ...t, avatar_url: url || null } : t));
+                        fetchData();
+                      }
+                    }}
+                  />
+                </div>
+              )}
               <Button onClick={handleSave} className="w-full">{editId ? 'Salvar' : 'Criar Sala'}</Button>
             </div>
           </DialogContent>
