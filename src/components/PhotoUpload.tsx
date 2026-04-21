@@ -7,7 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 
 interface PhotoUploadProps {
   currentUrl?: string | null;
-  folder: 'children' | 'guardians';
+  folder: 'children' | 'guardians' | 'teachers';
   onUploaded: (url: string) => void;
   name?: string;
   size?: 'sm' | 'lg';

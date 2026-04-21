@@ -6,10 +6,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Plus, School, Trash2, Pencil } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { ImportExcel } from '@/components/ImportExcel';
 import { ExportExcel } from '@/components/ExportExcel';
+import { PhotoUpload } from '@/components/PhotoUpload';
 
 export default function Classrooms() {
   const [classrooms, setClassrooms] = useState<any[]>([]);
@@ -25,10 +27,12 @@ export default function Classrooms() {
     const { data } = await supabase.from('classrooms').select('*').order('name');
     const teacherIds = (data || []).map(c => c.teacher_user_id).filter(Boolean);
     if (teacherIds.length > 0) {
-      const { data: profs } = await supabase.from('profiles').select('user_id, full_name').in('user_id', teacherIds);
+      const { data: profs } = await supabase.from('profiles').select('user_id, full_name, avatar_url').in('user_id', teacherIds);
       if (profs && data) {
         data.forEach(c => {
-          (c as any).teacher_name = profs.find(p => p.user_id === c.teacher_user_id)?.full_name || null;
+          const p = profs.find(p => p.user_id === c.teacher_user_id);
+          (c as any).teacher_name = p?.full_name || null;
+          (c as any).teacher_avatar = p?.avatar_url || null;
         });
       }
     }
@@ -36,7 +40,7 @@ export default function Classrooms() {
     const { data: roles } = await supabase.from('user_roles').select('user_id').eq('role', 'teacher');
     if (roles) {
       const ids = roles.map(r => r.user_id);
-      const { data: profs } = await supabase.from('profiles').select('user_id, full_name').in('user_id', ids);
+      const { data: profs } = await supabase.from('profiles').select('user_id, full_name, avatar_url').in('user_id', ids);
       setTeachers(profs || []);
     }
   };
@@ -149,6 +153,28 @@ export default function Classrooms() {
                   </SelectContent>
                 </Select>
               </div>
+              {teacherId && (
+                <div className="space-y-2 rounded-lg border p-3">
+                  <Label className="text-sm">Foto da Professora</Label>
+                  <PhotoUpload
+                    currentUrl={teachers.find(t => t.user_id === teacherId)?.avatar_url}
+                    folder="teachers"
+                    name={teachers.find(t => t.user_id === teacherId)?.full_name}
+                    onUploaded={async (url) => {
+                      const { error } = await supabase
+                        .from('profiles')
+                        .update({ avatar_url: url || null })
+                        .eq('user_id', teacherId);
+                      if (error) {
+                        toast({ title: 'Erro', description: error.message, variant: 'destructive' });
+                      } else {
+                        setTeachers(prev => prev.map(t => t.user_id === teacherId ? { ...t, avatar_url: url || null } : t));
+                        fetchData();
+                      }
+                    }}
+                  />
+                </div>
+              )}
               <Button onClick={handleSave} className="w-full">{editId ? 'Salvar' : 'Criar Sala'}</Button>
             </div>
           </DialogContent>
@@ -175,9 +201,17 @@ export default function Classrooms() {
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">{room.grade || 'Sem série'}</p>
-              <p className="text-sm text-muted-foreground">
-                Professora: {room.teacher_name || 'Não atribuída'}
-              </p>
+              <div className="mt-3 flex items-center gap-2">
+                <Avatar className="h-9 w-9">
+                  <AvatarImage src={room.teacher_avatar || undefined} alt={room.teacher_name || 'Professora'} />
+                  <AvatarFallback className="text-xs bg-secondary">
+                    {room.teacher_name
+                      ? room.teacher_name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
+                      : '?'}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-sm">{room.teacher_name || 'Não atribuída'}</span>
+              </div>
             </CardContent>
           </Card>
         ))}
