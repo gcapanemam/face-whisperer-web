@@ -27,10 +27,12 @@ export default function Classrooms() {
     const { data } = await supabase.from('classrooms').select('*').order('name');
     const teacherIds = (data || []).map(c => c.teacher_user_id).filter(Boolean);
     if (teacherIds.length > 0) {
-      const { data: profs } = await supabase.from('profiles').select('user_id, full_name').in('user_id', teacherIds);
+      const { data: profs } = await supabase.from('profiles').select('user_id, full_name, avatar_url').in('user_id', teacherIds);
       if (profs && data) {
         data.forEach(c => {
-          (c as any).teacher_name = profs.find(p => p.user_id === c.teacher_user_id)?.full_name || null;
+          const p = profs.find(p => p.user_id === c.teacher_user_id);
+          (c as any).teacher_name = p?.full_name || null;
+          (c as any).teacher_avatar = p?.avatar_url || null;
         });
       }
     }
@@ -38,7 +40,7 @@ export default function Classrooms() {
     const { data: roles } = await supabase.from('user_roles').select('user_id').eq('role', 'teacher');
     if (roles) {
       const ids = roles.map(r => r.user_id);
-      const { data: profs } = await supabase.from('profiles').select('user_id, full_name').in('user_id', ids);
+      const { data: profs } = await supabase.from('profiles').select('user_id, full_name, avatar_url').in('user_id', ids);
       setTeachers(profs || []);
     }
   };
