@@ -15,6 +15,21 @@ export function ReceptionDashboard() {
   const [isPolling, setIsPolling] = useState(false);
   const [devices, setDevices] = useState<any[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('all');
+  const [allowedClassroomIds, setAllowedClassroomIds] = useState<string[]>([]);
+  const [allowedClassroomNames, setAllowedClassroomNames] = useState<string[]>([]);
+
+  const fetchAllowedClassrooms = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data } = await supabase
+      .from('monitor_classrooms')
+      .select('classroom_id, classrooms(name)')
+      .eq('user_id', user.id);
+    const ids = (data || []).map((r: any) => r.classroom_id);
+    const names = (data || []).map((r: any) => r.classrooms?.name).filter(Boolean);
+    setAllowedClassroomIds(ids);
+    setAllowedClassroomNames(names);
+  };
 
   const fetchEvents = async () => {
     let query = supabase
@@ -25,6 +40,9 @@ export function ReceptionDashboard() {
       .limit(50);
     if (selectedDeviceId !== 'all') {
       query = query.eq('device_id', selectedDeviceId);
+    }
+    if (allowedClassroomIds.length > 0) {
+      query = query.in('classroom_id', allowedClassroomIds);
     }
     const { data } = await query;
     setEvents(data || []);
@@ -68,9 +86,13 @@ export function ReceptionDashboard() {
   }, [selectedDeviceId]);
 
   useEffect(() => {
+    fetchAllowedClassrooms();
+    fetchDevices();
+  }, []);
+
+  useEffect(() => {
     fetchEvents();
     fetchUnknown();
-    fetchDevices();
     pollDevice();
 
     // Auto-poll every 10 seconds
@@ -91,7 +113,8 @@ export function ReceptionDashboard() {
       clearInterval(interval);
       supabase.removeChannel(channel);
     };
-  }, [pollDevice]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pollDevice, allowedClassroomIds.join(',')]);
 
   const statusConfig: Record<string, { label: string; class: string }> = {
     pending: { label: 'Pendente', class: 'bg-warning/20 text-warning' },
@@ -116,6 +139,11 @@ export function ReceptionDashboard() {
         <div>
           <h1 className="font-display text-2xl font-bold">Monitoramento</h1>
           <p className="text-muted-foreground">Feed ao vivo de reconhecimentos faciais</p>
+          {allowedClassroomNames.length > 0 && (
+            <p className="text-xs text-primary mt-1">
+              Filtrado por sala(s): {allowedClassroomNames.join(', ')}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Select value={selectedDeviceId} onValueChange={setSelectedDeviceId}>

@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Plus, Trash2, Loader2, Pencil } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -26,6 +27,7 @@ export default function Users() {
   const [fullName, setFullName] = useState('');
   const [role, setRole] = useState('teacher');
   const [classroomId, setClassroomId] = useState('');
+  const [monitorClassroomIds, setMonitorClassroomIds] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [editUserId, setEditUserId] = useState<string | null>(null);
@@ -37,10 +39,12 @@ export default function Users() {
     const userIds = roles.map(r => r.user_id);
     const { data: profiles } = await supabase.from('profiles').select('*').in('user_id', userIds);
     const { data: rooms } = await supabase.from('classrooms').select('id, name, teacher_user_id');
+    const { data: monitors } = await supabase.from('monitor_classrooms').select('user_id, classroom_id');
     const merged = roles.map(r => ({
       ...r,
       profile: profiles?.find(p => p.user_id === r.user_id),
       classroom: rooms?.find(c => c.teacher_user_id === r.user_id),
+      monitorClassroomIds: (monitors || []).filter(m => m.user_id === r.user_id).map(m => m.classroom_id),
     }));
     setUsers(merged);
   };
@@ -53,7 +57,7 @@ export default function Users() {
   useEffect(() => { fetchUsers(); fetchClassrooms(); }, []);
 
   const resetForm = () => {
-    setEmail(''); setPassword(''); setFullName(''); setRole('teacher'); setClassroomId(''); setEditUserId(null);
+    setEmail(''); setPassword(''); setFullName(''); setRole('teacher'); setClassroomId(''); setMonitorClassroomIds([]); setEditUserId(null);
   };
 
   const openEdit = (u: any) => {
@@ -63,7 +67,17 @@ export default function Users() {
     setPassword('');
     setRole(u.role);
     setClassroomId(u.classroom?.id || '');
+    setMonitorClassroomIds(u.monitorClassroomIds || []);
     setOpen(true);
+  };
+
+  const syncMonitorClassrooms = async (userId: string, ids: string[]) => {
+    await supabase.from('monitor_classrooms').delete().eq('user_id', userId);
+    if (ids.length > 0) {
+      await supabase.from('monitor_classrooms').insert(
+        ids.map(classroom_id => ({ user_id: userId, classroom_id }))
+      );
+    }
   };
 
   const handleSave = async () => {
@@ -80,6 +94,12 @@ export default function Users() {
       await supabase.from('classrooms').update({ teacher_user_id: null }).eq('teacher_user_id', editUserId);
       if (role === 'teacher' && classroomId) {
         await supabase.from('classrooms').update({ teacher_user_id: editUserId }).eq('id', classroomId);
+      }
+      // Sync monitor classrooms (reception/secretary)
+      if (role === 'reception' || role === 'secretary') {
+        await syncMonitorClassrooms(editUserId, monitorClassroomIds);
+      } else {
+        await supabase.from('monitor_classrooms').delete().eq('user_id', editUserId);
       }
       toast({ title: 'Usuário atualizado!' });
       resetForm(); setOpen(false); fetchUsers(); fetchClassrooms();
@@ -98,6 +118,10 @@ export default function Users() {
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
+      const newUserId = data?.user?.id || data?.userId;
+      if (newUserId && (role === 'reception' || role === 'secretary') && monitorClassroomIds.length > 0) {
+        await syncMonitorClassrooms(newUserId, monitorClassroomIds);
+      }
       toast({ title: 'Usuário criado com sucesso!' });
       resetForm(); setOpen(false); fetchUsers(); fetchClassrooms();
     } catch (err: any) {
@@ -110,7 +134,14 @@ export default function Users() {
   const handleDelete = async (userId: string) => {
     await supabase.from('user_roles').delete().eq('user_id', userId);
     await supabase.from('classrooms').update({ teacher_user_id: null }).eq('teacher_user_id', userId);
+    await supabase.from('monitor_classrooms').delete().eq('user_id', userId);
     fetchUsers(); fetchClassrooms();
+  };
+
+  const toggleMonitorClassroom = (id: string) => {
+    setMonitorClassroomIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
   };
 
   const availableClassrooms = classrooms.filter(c => !c.teacher_user_id || c.teacher_user_id === editUserId);
@@ -147,7 +178,7 @@ export default function Users() {
               )}
               <div className="space-y-2">
                 <Label>Perfil</Label>
-                <Select value={role} onValueChange={(v) => { setRole(v); if (v !== 'teacher') setClassroomId(''); }}>
+                <Select value={role} onValueChange={(v) => { setRole(v); if (v !== 'teacher') setClassroomId(''); if (v !== 'reception' && v !== 'secretary') setMonitorClassroomIds([]); }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="admin">Administrador</SelectItem>
@@ -172,6 +203,27 @@ export default function Users() {
                 </div>
               )}
 
+              {(role === 'reception' || role === 'secretary') && (
+                <div className="space-y-2">
+                  <Label>Salas que irá monitorar</Label>
+                  <p className="text-xs text-muted-foreground">Deixe vazio para monitorar todas as salas.</p>
+                  <div className="max-h-48 overflow-y-auto rounded-md border p-3 space-y-2">
+                    {classrooms.length === 0 && (
+                      <p className="text-sm text-muted-foreground">Nenhuma sala cadastrada.</p>
+                    )}
+                    {classrooms.map(c => (
+                      <label key={c.id} className="flex items-center gap-2 cursor-pointer">
+                        <Checkbox
+                          checked={monitorClassroomIds.includes(c.id)}
+                          onCheckedChange={() => toggleMonitorClassroom(c.id)}
+                        />
+                        <span className="text-sm">{c.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <Button onClick={handleSave} className="w-full" disabled={creating}>
                 {creating && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
                 {editUserId ? 'Salvar' : 'Criar Usuário'}
@@ -189,17 +241,26 @@ export default function Users() {
                 <TableHead>Nome</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Perfil</TableHead>
-                <TableHead>Sala</TableHead>
+                <TableHead>Sala(s)</TableHead>
                 <TableHead className="w-24">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {users.map(u => (
+              {users.map(u => {
+                const monitorNames = (u.monitorClassroomIds || [])
+                  .map((id: string) => classrooms.find(c => c.id === id)?.name)
+                  .filter(Boolean);
+                let salaCell = '—';
+                if (u.role === 'teacher') salaCell = u.classroom?.name || '—';
+                else if (u.role === 'reception' || u.role === 'secretary') {
+                  salaCell = monitorNames.length > 0 ? monitorNames.join(', ') : 'Todas';
+                }
+                return (
                 <TableRow key={u.user_id}>
                   <TableCell className="font-medium">{u.profile?.full_name || '—'}</TableCell>
                   <TableCell>{u.profile?.email || '—'}</TableCell>
                   <TableCell><Badge variant="secondary">{roleLabels[u.role] || u.role}</Badge></TableCell>
-                  <TableCell>{u.classroom?.name || '—'}</TableCell>
+                  <TableCell className="text-sm">{salaCell}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
                       <Button variant="ghost" size="icon" onClick={() => openEdit(u)}>
@@ -211,7 +272,8 @@ export default function Users() {
                     </div>
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
               {users.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-muted-foreground py-8">Nenhum usuário cadastrado.</TableCell>
