@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { MonitorSmartphone, AlertTriangle, CheckCircle, RefreshCw, Wifi, WifiOff, User } from 'lucide-react';
+import { MonitorSmartphone, AlertTriangle, CheckCircle, RefreshCw, Wifi, WifiOff, User, Radar } from 'lucide-react';
 
 export function ReceptionDashboard() {
   const [events, setEvents] = useState<any[]>([]);
