@@ -86,9 +86,13 @@ export function ReceptionDashboard() {
   }, [selectedDeviceId]);
 
   useEffect(() => {
+    fetchAllowedClassrooms();
+    fetchDevices();
+  }, []);
+
+  useEffect(() => {
     fetchEvents();
     fetchUnknown();
-    fetchDevices();
     pollDevice();
 
     // Auto-poll every 10 seconds
@@ -109,7 +113,8 @@ export function ReceptionDashboard() {
       clearInterval(interval);
       supabase.removeChannel(channel);
     };
-  }, [pollDevice]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pollDevice, allowedClassroomIds.join(',')]);
 
   const statusConfig: Record<string, { label: string; class: string }> = {
     pending: { label: 'Pendente', class: 'bg-warning/20 text-warning' },
