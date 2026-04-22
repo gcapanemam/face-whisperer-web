@@ -139,7 +139,7 @@ export function ReceptionDashboard() {
       supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pollDevice, allowedClassroomIds.join(',')]);
+  }, [pollDevice, allowedClassroomIds === null ? '' : allowedClassroomIds.join(','), isAdmin]);
 
   const statusConfig: Record<string, { label: string; class: string }> = {
     pending: { label: 'Pendente', class: 'bg-warning/20 text-warning' },
