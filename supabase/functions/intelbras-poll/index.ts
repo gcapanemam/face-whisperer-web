@@ -118,7 +118,8 @@ async function pollDevice(device: DeviceConfig, supabase: any, testOnly: boolean
   const auth = new DigestAuth(device.username, device.password);
 
   let events: any[] = [];
-  let deviceStatus = "online";
+  let deviceStatus = "offline";
+  let anyReachable = false;
   const debugInfo: any = {};
 
   const endpoints = [
@@ -127,33 +128,32 @@ async function pollDevice(device: DeviceConfig, supabase: any, testOnly: boolean
     `/cgi-bin/AccessControl.cgi?action=list&channel=1`,
   ];
 
-  try {
-
-    for (const endpoint of endpoints) {
-      const url = `${cleanUrl}${endpoint}`;
-      console.log(`[${device.name}] Trying: ${url}`);
-      try {
-        const response = await auth.authenticate(url);
-        const text = await response.text();
-        if (text.includes("<!DOCTYPE") || text.includes("<html")) {
-          debugInfo[endpoint] = { status: response.status, type: "html" };
-          continue;
-        }
-        debugInfo[endpoint] = { status: response.status, type: "api", preview: text.slice(0, 200) };
-        if (response.ok) {
-          const parsed = parseDahuaResponse(text);
-          if (parsed.length > 0) {
-            events = parsed;
-            break;
-          }
-        }
-      } catch (endpointError) {
-        debugInfo[endpoint] = { error: endpointError.message };
+  for (const endpoint of endpoints) {
+    const url = `${cleanUrl}${endpoint}`;
+    console.log(`[${device.name}] Trying: ${url}`);
+    try {
+      const response = await auth.authenticate(url);
+      const text = await response.text();
+      // Got an HTTP response back from the device → it's reachable
+      anyReachable = true;
+      if (text.includes("<!DOCTYPE") || text.includes("<html")) {
+        debugInfo[endpoint] = { status: response.status, type: "html" };
+        continue;
       }
+      debugInfo[endpoint] = { status: response.status, type: "api", preview: text.slice(0, 200) };
+      if (response.ok) {
+        const parsed = parseDahuaResponse(text);
+        if (parsed.length > 0) {
+          events = parsed;
+          break;
+        }
+      }
+    } catch (endpointError) {
+      debugInfo[endpoint] = { error: endpointError.message };
     }
-  } catch {
-    deviceStatus = "offline";
   }
+
+  if (anyReachable) deviceStatus = "online";
 
   if (testOnly) {
     return { deviceId: device.id, deviceName: device.name, deviceStatus, debugInfo };
