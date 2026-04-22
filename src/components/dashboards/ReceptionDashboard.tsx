@@ -157,6 +157,7 @@ export function ReceptionDashboard() {
 
   const isSearching = deviceStatus === 'polling' || deviceStatus === 'unknown';
   const DeviceIcon = deviceStatusConfig[deviceStatus].icon;
+  const noClassroomsAssigned = !isAdmin && allowedClassroomIds !== null && allowedClassroomIds.length === 0;
 
   return (
     <div className="space-y-6">
@@ -167,6 +168,11 @@ export function ReceptionDashboard() {
           {allowedClassroomNames.length > 0 && (
             <p className="text-xs text-primary mt-1">
               Filtrado por sala(s): {allowedClassroomNames.join(', ')}
+            </p>
+          )}
+          {noClassroomsAssigned && (
+            <p className="text-xs text-destructive mt-1">
+              Nenhuma sala atribuída. Solicite ao administrador para vincular salas ao seu usuário.
             </p>
           )}
         </div>
