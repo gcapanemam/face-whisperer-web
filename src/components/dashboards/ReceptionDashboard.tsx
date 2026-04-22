@@ -15,12 +15,24 @@ export function ReceptionDashboard() {
   const [isPolling, setIsPolling] = useState(false);
   const [devices, setDevices] = useState<any[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('all');
-  const [allowedClassroomIds, setAllowedClassroomIds] = useState<string[]>([]);
+  const [allowedClassroomIds, setAllowedClassroomIds] = useState<string[] | null>(null);
   const [allowedClassroomNames, setAllowedClassroomNames] = useState<string[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const fetchAllowedClassrooms = async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) {
+      setAllowedClassroomIds([]);
+      return;
+    }
+    // Check if admin (admins see everything)
+    const { data: roleData } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id);
+    const adminRole = (roleData || []).some((r: any) => r.role === 'admin');
+    setIsAdmin(adminRole);
+
     const { data } = await supabase
       .from('monitor_classrooms')
       .select('classroom_id, classrooms(name)')
@@ -32,6 +44,13 @@ export function ReceptionDashboard() {
   };
 
   const fetchEvents = async () => {
+    // Wait for allowed classrooms to load
+    if (allowedClassroomIds === null) return;
+    // If not admin and no classrooms assigned, show nothing
+    if (!isAdmin && allowedClassroomIds.length === 0) {
+      setEvents([]);
+      return;
+    }
     let query = supabase
       .from('pickup_events')
       .select('*, guardians(full_name, photo_url), children(full_name, photo_url), classrooms(name)')
@@ -41,6 +60,7 @@ export function ReceptionDashboard() {
     if (selectedDeviceId !== 'all') {
       query = query.eq('device_id', selectedDeviceId);
     }
+    // Apply classroom filter when user has explicit assignments (even admins, if assigned)
     if (allowedClassroomIds.length > 0) {
       query = query.in('classroom_id', allowedClassroomIds);
     }
@@ -49,6 +69,11 @@ export function ReceptionDashboard() {
   };
 
   const fetchUnknown = async () => {
+    if (allowedClassroomIds === null) return;
+    if (!isAdmin && allowedClassroomIds.length === 0) {
+      setUnknownCount(0);
+      return;
+    }
     let query = supabase
       .from('recognition_log')
       .select('id', { count: 'exact', head: true })
@@ -114,7 +139,7 @@ export function ReceptionDashboard() {
       supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pollDevice, allowedClassroomIds.join(',')]);
+  }, [pollDevice, allowedClassroomIds === null ? '' : allowedClassroomIds.join(','), isAdmin]);
 
   const statusConfig: Record<string, { label: string; class: string }> = {
     pending: { label: 'Pendente', class: 'bg-warning/20 text-warning' },
@@ -132,6 +157,7 @@ export function ReceptionDashboard() {
 
   const isSearching = deviceStatus === 'polling' || deviceStatus === 'unknown';
   const DeviceIcon = deviceStatusConfig[deviceStatus].icon;
+  const noClassroomsAssigned = !isAdmin && allowedClassroomIds !== null && allowedClassroomIds.length === 0;
 
   return (
     <div className="space-y-6">
@@ -142,6 +168,11 @@ export function ReceptionDashboard() {
           {allowedClassroomNames.length > 0 && (
             <p className="text-xs text-primary mt-1">
               Filtrado por sala(s): {allowedClassroomNames.join(', ')}
+            </p>
+          )}
+          {noClassroomsAssigned && (
+            <p className="text-xs text-destructive mt-1">
+              Nenhuma sala atribuída. Solicite ao administrador para vincular salas ao seu usuário.
             </p>
           )}
         </div>
