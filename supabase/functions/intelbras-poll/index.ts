@@ -308,6 +308,25 @@ async function pollDevice(device: DeviceConfig, supabase: any, testOnly: boolean
       }
     }
 
+    // Try to capture the photo taken by the device at recognition time
+    let capturePhotoUrl: string | null = null;
+    try {
+      const inlineB64 = extractInlineBase64(event);
+      let photoBytes: Uint8Array | null = null;
+      if (inlineB64) {
+        photoBytes = base64ToBytes(inlineB64);
+        if (photoBytes.length > 500 * 1024) photoBytes = null;
+      } else {
+        const path = extractCapturePath(event);
+        if (path) photoBytes = await downloadCapturePhoto(auth, cleanUrl, path);
+      }
+      if (photoBytes && device.id !== "env") {
+        capturePhotoUrl = await uploadCaptureToStorage(supabase, device.id, eventId, photoBytes);
+      }
+    } catch (e) {
+      console.warn(`Capture photo flow failed for event ${eventId}: ${(e as any)?.message}`);
+    }
+
     await supabase.from("recognition_log").insert({
       intelbras_event_id: eventId,
       intelbras_person_id: personId,
@@ -315,6 +334,7 @@ async function pollDevice(device: DeviceConfig, supabase: any, testOnly: boolean
       recognized,
       confidence: confidence || null,
       raw_data: event,
+      photo_url: capturePhotoUrl,
       device_id: device.id === "env" ? null : device.id,
     });
     processedCount++;
@@ -336,6 +356,7 @@ async function pollDevice(device: DeviceConfig, supabase: any, testOnly: boolean
               classroom_id: child.classroom_id,
               intelbras_event_id: eventId,
               status: "pending",
+              capture_photo_url: capturePhotoUrl,
               device_id: device.id === "env" ? null : device.id,
             });
             pickupEventsCreated++;
