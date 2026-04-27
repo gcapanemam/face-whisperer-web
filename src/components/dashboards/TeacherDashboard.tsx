@@ -133,6 +133,15 @@ export function TeacherDashboard() {
                     ) : null}
                     <AvatarFallback>{pickup.children?.full_name?.[0] || '?'}</AvatarFallback>
                   </Avatar>
+                  {pickup.capture_photo_url && (
+                    <a href={pickup.capture_photo_url} target="_blank" rel="noopener noreferrer" title="Ver captura em tamanho real">
+                      <img
+                        src={pickup.capture_photo_url}
+                        alt="Captura do reconhecimento"
+                        className="h-12 w-12 rounded-md object-cover border-2 border-dashed border-primary/40 hover:opacity-80 transition"
+                      />
+                    </a>
+                  )}
                   <div>
                     <p className="font-semibold">{pickup.guardians?.full_name}</p>
                     <p className="text-sm text-muted-foreground">

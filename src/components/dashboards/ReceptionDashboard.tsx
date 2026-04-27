@@ -260,6 +260,20 @@ export function ReceptionDashboard() {
                     <p className="text-xs font-medium text-center truncate max-w-[72px]">{ev.guardians?.full_name || 'Desconhecido'}</p>
                   </div>
 
+                  {/* Captured face at recognition time */}
+                  {ev.capture_photo_url && (
+                    <div className="flex flex-col items-center gap-1 shrink-0">
+                      <a href={ev.capture_photo_url} target="_blank" rel="noopener noreferrer" title="Ver captura em tamanho real">
+                        <img
+                          src={ev.capture_photo_url}
+                          alt="Captura do reconhecimento"
+                          className="h-16 w-16 rounded-lg object-cover border-2 border-dashed border-primary/40 hover:opacity-80 transition"
+                        />
+                      </a>
+                      <p className="text-[10px] text-muted-foreground">Captura</p>
+                    </div>
+                  )}
+
                   {/* Arrow / separator */}
                   <div className="text-muted-foreground text-lg">→</div>
 

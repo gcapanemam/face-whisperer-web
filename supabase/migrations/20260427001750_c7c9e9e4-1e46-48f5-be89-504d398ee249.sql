@@ -1,0 +1,1 @@
+ALTER TABLE public.pickup_events ADD COLUMN IF NOT EXISTS capture_photo_url text;

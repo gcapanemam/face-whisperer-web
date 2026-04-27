@@ -266,6 +266,7 @@ export type Database = {
       }
       pickup_events: {
         Row: {
+          capture_photo_url: string | null
           child_id: string | null
           classroom_id: string | null
           confirmed_at: string | null
@@ -280,6 +281,7 @@ export type Database = {
           status: string
         }
         Insert: {
+          capture_photo_url?: string | null
           child_id?: string | null
           classroom_id?: string | null
           confirmed_at?: string | null
@@ -294,6 +296,7 @@ export type Database = {
           status?: string
         }
         Update: {
+          capture_photo_url?: string | null
           child_id?: string | null
           classroom_id?: string | null
           confirmed_at?: string | null
