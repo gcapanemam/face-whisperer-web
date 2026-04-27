@@ -256,7 +256,7 @@ async function pollDevice(device: DeviceConfig, supabase: any, testOnly: boolean
         }
       }
     } catch (endpointError) {
-      debugInfo[endpoint] = { error: endpointError.message };
+      debugInfo[endpoint] = { error: (endpointError as any)?.message };
     }
   }
 
@@ -409,7 +409,7 @@ serve(async (req) => {
         const result = await pollDevice(device, supabase, testOnly);
         results.push(result);
       } catch (err) {
-        results.push({ deviceId: device.id, deviceName: device.name, deviceStatus: "offline", error: err.message });
+        results.push({ deviceId: device.id, deviceName: device.name, deviceStatus: "offline", error: (err as any)?.message });
       }
     }
 
@@ -423,9 +423,9 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
-    console.error(`Error: ${error.message}`);
+    console.error(`Error: ${(error as any)?.message}`);
     return new Response(
-      JSON.stringify({ error: error.message, success: false }),
+      JSON.stringify({ error: (error as any)?.message, success: false }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
