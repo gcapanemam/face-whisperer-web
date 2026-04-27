@@ -113,6 +113,113 @@ function getFallbackDevice(): DeviceConfig[] {
   }];
 }
 
+// Look for fields in the event payload that point to the captured face image
+function extractCapturePath(event: any): string | null {
+  const candidates = [
+    "FacePicturePath", "CapturePicturePath", "CardPath", "FacePath",
+    "PicturePath", "ImagePath", "JpegPath", "Path",
+  ];
+  for (const key of candidates) {
+    const v = event?.[key];
+    if (typeof v === "string" && v.length > 0 && (v.startsWith("/") || v.startsWith("http"))) {
+      return v;
+    }
+  }
+  // Common nested arrays: Pictures[0].Path / CandidatesList[0].FacePicturePath
+  for (const arrKey of ["Pictures", "PictureList", "CandidatesList"]) {
+    const arr = event?.[arrKey];
+    if (Array.isArray(arr) && arr.length > 0) {
+      for (const k of candidates) {
+        const v = arr[0]?.[k];
+        if (typeof v === "string" && v.length > 0) return v;
+      }
+    }
+  }
+  // Flat-keyed variants from parseDahuaResponse: e.g. "Pictures[0].Path"
+  for (const k of Object.keys(event || {})) {
+    if (/Picture.*Path|FacePath|JpegPath|ImagePath/i.test(k)) {
+      const v = event[k];
+      if (typeof v === "string" && v.length > 0) return v;
+    }
+  }
+  return null;
+}
+
+// Some devices return base64 inline rather than a path
+function extractInlineBase64(event: any): string | null {
+  const candidates = ["FaceImage", "Image", "PhotoData", "FacePicture"];
+  for (const key of candidates) {
+    const v = event?.[key];
+    if (typeof v === "string" && v.length > 200 && /^[A-Za-z0-9+/=]+$/.test(v.slice(0, 100))) {
+      return v;
+    }
+  }
+  return null;
+}
+
+async function downloadCapturePhoto(
+  auth: DigestAuth, baseUrl: string, path: string
+): Promise<Uint8Array | null> {
+  // If path is already absolute URL, use directly; otherwise build endpoint
+  let url: string;
+  if (path.startsWith("http")) {
+    url = path;
+  } else {
+    // Dahua/Intelbras typically serves capture files via RPC_Loadfile
+    const cleanPath = path.startsWith("/") ? path : `/${path}`;
+    url = `${baseUrl}/RPC_Loadfile${cleanPath}`;
+  }
+  try {
+    const resp = await auth.authenticate(url, "GET", 5000);
+    if (!resp.ok) {
+      // Fallback: try without RPC_Loadfile prefix
+      if (!path.startsWith("http")) {
+        const altUrl = `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
+        const alt = await auth.authenticate(altUrl, "GET", 5000);
+        if (!alt.ok) return null;
+        const buf = new Uint8Array(await alt.arrayBuffer());
+        return buf.length > 0 && buf.length < 500 * 1024 ? buf : null;
+      }
+      return null;
+    }
+    const buf = new Uint8Array(await resp.arrayBuffer());
+    if (buf.length === 0 || buf.length > 500 * 1024) return null;
+    return buf;
+  } catch (e) {
+    console.warn(`Failed to download capture photo from ${url}: ${(e as any)?.message}`);
+    return null;
+  }
+}
+
+function base64ToBytes(b64: string): Uint8Array {
+  const clean = b64.replace(/\s/g, "");
+  const bin = atob(clean);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+async function uploadCaptureToStorage(
+  supabase: any, deviceId: string, eventId: string, bytes: Uint8Array
+): Promise<string | null> {
+  try {
+    const safeEventId = eventId.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const filePath = `recognitions/${deviceId}/${safeEventId}.jpg`;
+    const { error } = await supabase.storage
+      .from("photos")
+      .upload(filePath, bytes, { contentType: "image/jpeg", upsert: true });
+    if (error) {
+      console.warn(`Storage upload failed: ${error.message}`);
+      return null;
+    }
+    const { data } = supabase.storage.from("photos").getPublicUrl(filePath);
+    return data?.publicUrl || null;
+  } catch (e) {
+    console.warn(`Storage upload exception: ${(e as any)?.message}`);
+    return null;
+  }
+}
+
 async function pollDevice(device: DeviceConfig, supabase: any, testOnly: boolean) {
   const cleanUrl = device.device_url.replace(/#.*$/, '').replace(/\/+$/, '');
   const auth = new DigestAuth(device.username, device.password);
