@@ -1,44 +1,53 @@
+## Objetivo
 
+Capturar e armazenar a foto que o dispositivo Intelbras tirou no momento do reconhecimento, para que ela possa ser exibida nos painéis (Recepção, Monitoramento, etc.) junto ao registro do evento.
 
-# Vincular Responsáveis a Dispositivos
+## Situação atual
 
-## Problema
-O campo `intelbras_person_id` está na tabela `guardians`, mas com múltiplos dispositivos um responsável pode ter IDs diferentes em cada aparelho, ou estar cadastrado apenas em alguns.
+- A tabela `recognition_log` já tem a coluna `photo_url` — mas hoje fica sempre `null`.
+- O `intelbras-poll` salva apenas os metadados do evento (`raw_data`), sem baixar a imagem.
+- Os eventos do Dahua/Intelbras geralmente trazem campos apontando para a foto da captura (ex: `FacePicturePath`, `CardPath`, `CapturePicture`) como caminho **interno** do dispositivo, que precisa ser baixado via Digest Auth.
 
-## Solução
+## Plano de implementação
 
-### 1. Nova tabela `guardian_devices` (migração)
+### 1. Detectar o caminho da foto no evento
+No `parseDahuaResponse` / `pollDevice`, identificar campos comuns que apontam para a foto capturada:
+- `FacePicturePath`
+- `CapturePicturePath`  
+- `CardPath`
+- `Pictures[0]` / `PictureList`
+
+Logar o `raw_data` dos próximos eventos para confirmar qual campo é retornado pelo modelo SS 3532 MF W (já está sendo salvo, podemos inspecionar via `recognition_log`).
+
+### 2. Baixar a foto do dispositivo (via Digest Auth)
+Para cada evento novo com caminho de foto:
+- Construir URL: `${device_url}/cgi-bin/RPC_Loadfile${path}` (ou endpoint equivalente que o teste mostrar)
+- Usar a classe `DigestAuth` já existente para baixar
+- Limitar tamanho (ex: 500KB) e timeout (5s) para não travar o poll
+
+### 3. Subir para o Storage e salvar URL
+- Bucket: reaproveitar o bucket público `photos` existente
+- Caminho: `recognitions/{deviceId}/{eventId}.jpg`
+- Após upload, salvar `publicUrl` em `recognition_log.photo_url`
+- Se também houver `pickup_event` criado, salvar a mesma URL ali (vou adicionar coluna `capture_photo_url` na tabela `pickup_events` via migration)
+
+### 4. Migração
 ```sql
-CREATE TABLE public.guardian_devices (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  guardian_id uuid NOT NULL REFERENCES public.guardians(id) ON DELETE CASCADE,
-  device_id uuid NOT NULL REFERENCES public.devices(id) ON DELETE CASCADE,
-  intelbras_person_id text NOT NULL,
-  synced boolean NOT NULL DEFAULT false,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (guardian_id, device_id)
-);
+ALTER TABLE pickup_events ADD COLUMN capture_photo_url text;
 ```
-- RLS: admins gerenciam, recepção visualiza
-- Migrar dados existentes: para cada responsável com `intelbras_person_id` preenchido, inserir um registro vinculando ao dispositivo existente
+(O `recognition_log.photo_url` já existe, só vamos passar a preenchê-lo.)
 
-### 2. Atualizar cadastro de Responsáveis (`src/pages/Guardians.tsx`)
-- Ao invés de um único campo `intelbras_person_id`, mostrar uma seção com checkboxes/lista dos dispositivos ativos
-- Para cada dispositivo selecionado, permitir informar o `intelbras_person_id` (ou buscar da lista do aparelho)
-- O campo `intelbras_person_id` antigo da tabela `guardians` pode ser mantido como legado mas não mais editado pela UI
+### 5. Exibir nas telas
+- **ReceptionDashboard**: ao lado do avatar do responsável, mostrar pequeno thumbnail "Captura" da foto real do momento do reconhecimento (clique abre em tamanho maior).
+- **Monitoring**: na lista de logs de reconhecimento, exibir thumbnail da `photo_url`.
+- **TeacherDashboard**: mesmo tratamento no card do pickup pendente.
 
-### 3. Atualizar Edge Functions
-- **`intelbras-poll`**: ao identificar uma pessoa, buscar na tabela `guardian_devices` pelo `intelbras_person_id` + `device_id` em vez de buscar direto em `guardians`
-- **`intelbras-face`**: ao enviar foto, registrar/atualizar o vínculo em `guardian_devices` para o dispositivo alvo
-- **`intelbras-persons`**: ao listar pessoas, mostrar o status de sincronização por dispositivo
+### 6. Robustez
+- Se o download da foto falhar, **não** falhar o evento — apenas logar e seguir salvando o `recognition_log` sem foto.
+- Tratar caso o dispositivo retorne foto em base64 inline (alguns modelos fazem isso), salvando direto sem fetch adicional.
 
-### 4. Atualizar ReceptionDashboard
-- O polling já passa `deviceId`; a lógica de matching usará `guardian_devices` para resolver o responsável correto
-
-## Arquivos impactados
-- **Migração**: criar tabela `guardian_devices`, migrar dados existentes
-- **Editar**: `src/pages/Guardians.tsx` (UI de vínculo por dispositivo)
-- **Editar**: `supabase/functions/intelbras-poll/index.ts` (lookup via `guardian_devices`)
-- **Editar**: `supabase/functions/intelbras-face/index.ts` (registrar vínculo)
-- **Editar**: `supabase/functions/intelbras-persons/index.ts` (contexto por dispositivo)
-
+## Resultado esperado
+Cada reconhecimento (recognized ou desconhecido) ficará com a foto real capturada pela câmera, permitindo:
+- Auditoria visual de quem realmente passou na catraca
+- Diferenciar quando alguém usa foto/máscara
+- Histórico fotográfico no Monitoramento e Relatórios
