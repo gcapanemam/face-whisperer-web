@@ -1,1 +1,4 @@
 project_id = "otppveeqdnldwxeafinf"
+
+[functions.intelbras-snapshot]
+verify_jwt = false

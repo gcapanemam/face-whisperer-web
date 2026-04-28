@@ -7,8 +7,30 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { MonitorSmartphone, AlertTriangle, CheckCircle, RefreshCw, Wifi, WifiOff, User, Radar } from 'lucide-react';
 
+const SUPABASE_URL = (import.meta as any).env.VITE_SUPABASE_URL as string;
+
+function buildSnapshotUrl(deviceId: string | null | undefined, rawPath: string | null | undefined): string | null {
+  if (!rawPath) return null;
+  const params = new URLSearchParams();
+  if (deviceId) params.set('deviceId', deviceId);
+  params.set('path', rawPath);
+  return `${SUPABASE_URL}/functions/v1/intelbras-snapshot?${params.toString()}`;
+}
+
+function extractRawPath(raw: any): string | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const keys = ['URL', 'Url', 'FacePicturePath', 'CapturePicturePath', 'PicturePath',
+    'ImagePath', 'JpegPath', 'Path', 'SnapURL', 'SnapshotURL', 'CardPath', 'FacePath'];
+  for (const k of keys) {
+    const v = raw[k];
+    if (typeof v === 'string' && v.length > 3) return v;
+  }
+  return null;
+}
+
 export function ReceptionDashboard() {
   const [events, setEvents] = useState<any[]>([]);
+  const [rawByEventId, setRawByEventId] = useState<Record<string, { path: string; deviceId: string | null }>>({});
   const [unknownCount, setUnknownCount] = useState(0);
   const [deviceStatus, setDeviceStatus] = useState<'online' | 'offline' | 'polling' | 'unknown'>('unknown');
   const [lastPoll, setLastPoll] = useState<string | null>(null);
@@ -66,6 +88,26 @@ export function ReceptionDashboard() {
     }
     const { data } = await query;
     setEvents(data || []);
+
+    // Fetch raw_data fallback paths from recognition_log for today
+    const eventIds = (data || []).map((e: any) => e.intelbras_event_id).filter(Boolean);
+    if (eventIds.length > 0) {
+      const { data: logs } = await supabase
+        .from('recognition_log')
+        .select('intelbras_event_id, device_id, raw_data')
+        .in('intelbras_event_id', eventIds)
+        .gte('created_at', new Date().toISOString().split('T')[0]);
+      const map: Record<string, { path: string; deviceId: string | null }> = {};
+      (logs || []).forEach((l: any) => {
+        const path = extractRawPath(l.raw_data);
+        if (path && l.intelbras_event_id && !map[l.intelbras_event_id]) {
+          map[l.intelbras_event_id] = { path, deviceId: l.device_id };
+        }
+      });
+      setRawByEventId(map);
+    } else {
+      setRawByEventId({});
+    }
   }, [allowedClassroomIds, isAdmin, selectedDeviceId]);
 
   const fetchUnknown = useCallback(async () => {
@@ -259,19 +301,28 @@ export function ReceptionDashboard() {
                     <p className="text-xs font-medium text-center truncate max-w-[72px]">{ev.guardians?.full_name || 'Desconhecido'}</p>
                   </div>
 
-                  {/* Captured face at recognition time */}
-                  {ev.capture_photo_url && (
-                    <div className="flex flex-col items-center gap-1 shrink-0">
-                      <a href={ev.capture_photo_url} target="_blank" rel="noopener noreferrer" title="Ver captura em tamanho real">
-                        <img
-                          src={ev.capture_photo_url}
-                          alt="Captura do reconhecimento"
-                          className="h-16 w-16 rounded-lg object-cover border-2 border-dashed border-primary/40 hover:opacity-80 transition"
-                        />
-                      </a>
-                      <p className="text-[10px] text-muted-foreground">Captura</p>
-                    </div>
-                  )}
+                  {/* Captured face at recognition time (with raw_data fallback) */}
+                  {(() => {
+                    const fallback = ev.intelbras_event_id ? rawByEventId[ev.intelbras_event_id] : null;
+                    const fallbackUrl = fallback ? buildSnapshotUrl(fallback.deviceId || ev.device_id, fallback.path) : null;
+                    const captureUrl = ev.capture_photo_url || fallbackUrl;
+                    if (!captureUrl) return null;
+                    return (
+                      <div className="flex flex-col items-center gap-1 shrink-0">
+                        <a href={captureUrl} target="_blank" rel="noopener noreferrer" title="Ver captura em tamanho real">
+                          <img
+                            src={captureUrl}
+                            alt="Captura do reconhecimento"
+                            className="h-16 w-16 rounded-lg object-cover border-2 border-dashed border-primary/40 hover:opacity-80 transition"
+                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                          />
+                        </a>
+                        <p className="text-[10px] text-muted-foreground">
+                          {ev.capture_photo_url ? 'Captura' : 'Captura (live)'}
+                        </p>
+                      </div>
+                    );
+                  })()}
 
                   {/* Arrow / separator */}
                   <div className="text-muted-foreground text-lg">→</div>
