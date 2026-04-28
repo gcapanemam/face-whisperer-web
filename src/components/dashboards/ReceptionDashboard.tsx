@@ -88,6 +88,26 @@ export function ReceptionDashboard() {
     }
     const { data } = await query;
     setEvents(data || []);
+
+    // Fetch raw_data fallback paths from recognition_log for today
+    const eventIds = (data || []).map((e: any) => e.intelbras_event_id).filter(Boolean);
+    if (eventIds.length > 0) {
+      const { data: logs } = await supabase
+        .from('recognition_log')
+        .select('intelbras_event_id, device_id, raw_data')
+        .in('intelbras_event_id', eventIds)
+        .gte('created_at', new Date().toISOString().split('T')[0]);
+      const map: Record<string, { path: string; deviceId: string | null }> = {};
+      (logs || []).forEach((l: any) => {
+        const path = extractRawPath(l.raw_data);
+        if (path && l.intelbras_event_id && !map[l.intelbras_event_id]) {
+          map[l.intelbras_event_id] = { path, deviceId: l.device_id };
+        }
+      });
+      setRawByEventId(map);
+    } else {
+      setRawByEventId({});
+    }
   }, [allowedClassroomIds, isAdmin, selectedDeviceId]);
 
   const fetchUnknown = useCallback(async () => {
