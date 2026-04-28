@@ -43,7 +43,7 @@ export function ReceptionDashboard() {
     setAllowedClassroomNames(names);
   };
 
-  const fetchEvents = async () => {
+  const fetchEvents = useCallback(async () => {
     // Wait for allowed classrooms to load
     if (allowedClassroomIds === null) return;
     // If not admin and no classrooms assigned, show nothing
@@ -66,9 +66,9 @@ export function ReceptionDashboard() {
     }
     const { data } = await query;
     setEvents(data || []);
-  };
+  }, [allowedClassroomIds, isAdmin, selectedDeviceId]);
 
-  const fetchUnknown = async () => {
+  const fetchUnknown = useCallback(async () => {
     if (allowedClassroomIds === null) return;
     if (!isAdmin && allowedClassroomIds.length === 0) {
       setUnknownCount(0);
@@ -84,7 +84,7 @@ export function ReceptionDashboard() {
     }
     const { count } = await query;
     setUnknownCount(count || 0);
-  };
+  }, [allowedClassroomIds, isAdmin, selectedDeviceId]);
 
   const fetchDevices = async () => {
     const { data } = await supabase.from('devices').select('id, name, enabled').eq('enabled', true).order('name');
@@ -108,7 +108,7 @@ export function ReceptionDashboard() {
     } finally {
       setIsPolling(false);
     }
-  }, [selectedDeviceId]);
+  }, [selectedDeviceId, fetchEvents, fetchUnknown]);
 
   useEffect(() => {
     fetchAllowedClassrooms();
@@ -138,8 +138,7 @@ export function ReceptionDashboard() {
       clearInterval(interval);
       supabase.removeChannel(channel);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pollDevice, allowedClassroomIds === null ? '' : allowedClassroomIds.join(','), isAdmin]);
+  }, [pollDevice, fetchEvents, fetchUnknown]);
 
   const statusConfig: Record<string, { label: string; class: string }> = {
     pending: { label: 'Pendente', class: 'bg-warning/20 text-warning' },
