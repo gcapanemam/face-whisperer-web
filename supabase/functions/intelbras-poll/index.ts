@@ -116,8 +116,8 @@ function getFallbackDevice(): DeviceConfig[] {
 // Look for fields in the event payload that point to the captured face image
 function extractCapturePath(event: any): string | null {
   const candidates = [
-    "FacePicturePath", "CapturePicturePath", "CardPath", "FacePath",
-    "PicturePath", "ImagePath", "JpegPath", "Path",
+    "URL", "Url", "FacePicturePath", "CapturePicturePath", "CardPath", "FacePath",
+    "PicturePath", "ImagePath", "JpegPath", "Path", "SnapURL", "SnapshotURL",
   ];
   for (const key of candidates) {
     const v = event?.[key];
