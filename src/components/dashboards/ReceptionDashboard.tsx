@@ -7,8 +7,30 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { MonitorSmartphone, AlertTriangle, CheckCircle, RefreshCw, Wifi, WifiOff, User, Radar } from 'lucide-react';
 
+const SUPABASE_URL = (import.meta as any).env.VITE_SUPABASE_URL as string;
+
+function buildSnapshotUrl(deviceId: string | null | undefined, rawPath: string | null | undefined): string | null {
+  if (!rawPath) return null;
+  const params = new URLSearchParams();
+  if (deviceId) params.set('deviceId', deviceId);
+  params.set('path', rawPath);
+  return `${SUPABASE_URL}/functions/v1/intelbras-snapshot?${params.toString()}`;
+}
+
+function extractRawPath(raw: any): string | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const keys = ['URL', 'Url', 'FacePicturePath', 'CapturePicturePath', 'PicturePath',
+    'ImagePath', 'JpegPath', 'Path', 'SnapURL', 'SnapshotURL', 'CardPath', 'FacePath'];
+  for (const k of keys) {
+    const v = raw[k];
+    if (typeof v === 'string' && v.length > 3) return v;
+  }
+  return null;
+}
+
 export function ReceptionDashboard() {
   const [events, setEvents] = useState<any[]>([]);
+  const [rawByEventId, setRawByEventId] = useState<Record<string, { path: string; deviceId: string | null }>>({});
   const [unknownCount, setUnknownCount] = useState(0);
   const [deviceStatus, setDeviceStatus] = useState<'online' | 'offline' | 'polling' | 'unknown'>('unknown');
   const [lastPoll, setLastPoll] = useState<string | null>(null);
