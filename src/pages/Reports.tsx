@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Download, Search } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function Reports() {
   const [events, setEvents] = useState<any[]>([]);
