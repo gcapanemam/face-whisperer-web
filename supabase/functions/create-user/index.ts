@@ -38,14 +38,15 @@ serve(async (req) => {
       });
     }
 
-    // Check admin role
+    // Check admin or super_admin role
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
-    const { data: isAdmin } = await adminClient.rpc("has_role", {
-      _user_id: caller.id,
-      _role: "admin",
-    });
+    const { data: callerRolesCheck } = await adminClient
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", caller.id);
+    const allowed = (callerRolesCheck || []).some((r: any) => r.role === "admin" || r.role === "super_admin");
 
-    if (!isAdmin) {
+    if (!allowed) {
       return new Response(JSON.stringify({ error: "Apenas administradores podem criar usuários" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
