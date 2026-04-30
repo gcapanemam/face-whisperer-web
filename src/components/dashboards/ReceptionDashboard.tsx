@@ -30,6 +30,7 @@ function extractRawPath(raw: any): string | null {
 }
 
 export function ReceptionDashboard() {
+  const { schoolId, isSuperAdmin } = useAuth();
   const [events, setEvents] = useState<any[]>([]);
   const [rawByEventId, setRawByEventId] = useState<Record<string, { path: string; deviceId: string | null }>>({});
   const [unknownCount, setUnknownCount] = useState(0);
