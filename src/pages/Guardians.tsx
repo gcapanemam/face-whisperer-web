@@ -15,6 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { PhotoUpload } from '@/components/PhotoUpload';
 import { ImportExcel } from '@/components/ImportExcel';
 import { ExportExcel } from '@/components/ExportExcel';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface IntelbrasPerson {
   userId: string;
@@ -29,6 +30,7 @@ interface DeviceLink {
 }
 
 export default function Guardians() {
+  const { schoolId } = useAuth();
   const [guardians, setGuardians] = useState<any[]>([]);
   const [children, setChildren] = useState<any[]>([]);
   const [devices, setDevices] = useState<any[]>([]);
@@ -211,22 +213,23 @@ export default function Guardians() {
       }
       // Update children links
       await supabase.from('guardian_children').delete().eq('guardian_id', editId);
-      if (selectedChildren.length > 0) {
+      if (selectedChildren.length > 0 && schoolId) {
         await supabase.from('guardian_children').insert(
-          selectedChildren.map(childId => ({ guardian_id: editId, child_id: childId }))
+          selectedChildren.map(childId => ({ guardian_id: editId, child_id: childId, school_id: schoolId }))
         );
       }
       // Update device links
       await supabase.from('guardian_devices').delete().eq('guardian_id', editId);
       const validLinks = deviceLinks.filter(l => l.intelbras_person_id);
-      if (validLinks.length > 0) {
+      if (validLinks.length > 0 && schoolId) {
         await supabase.from('guardian_devices').insert(
-          validLinks.map(l => ({ guardian_id: editId, device_id: l.device_id, intelbras_person_id: l.intelbras_person_id, synced: l.synced }))
+          validLinks.map(l => ({ guardian_id: editId, device_id: l.device_id, intelbras_person_id: l.intelbras_person_id, synced: l.synced, school_id: schoolId }))
         );
       }
       toast({ title: 'Responsável atualizado!' });
       resetForm(); setOpen(false); fetchData();
     } else {
+      if (!schoolId) { toast({ title: 'Selecione uma escola', variant: 'destructive' }); return; }
       const { data, error } = await supabase.from('guardians').insert({
         full_name: name,
         phone: phone || null,
@@ -234,6 +237,7 @@ export default function Guardians() {
         email: email || null,
         photo_url: photoUrl || null,
         intelbras_person_id: deviceLinks.length > 0 ? deviceLinks[0].intelbras_person_id : null,
+        school_id: schoolId,
       }).select().single();
 
       if (error) {
@@ -243,7 +247,7 @@ export default function Guardians() {
 
       if (selectedChildren.length > 0 && data) {
         await supabase.from('guardian_children').insert(
-          selectedChildren.map(childId => ({ guardian_id: data.id, child_id: childId }))
+          selectedChildren.map(childId => ({ guardian_id: data.id, child_id: childId, school_id: schoolId }))
         );
       }
 
@@ -251,7 +255,7 @@ export default function Guardians() {
       const validLinks = deviceLinks.filter(l => l.intelbras_person_id);
       if (validLinks.length > 0 && data) {
         await supabase.from('guardian_devices').insert(
-          validLinks.map(l => ({ guardian_id: data.id, device_id: l.device_id, intelbras_person_id: l.intelbras_person_id, synced: l.synced }))
+          validLinks.map(l => ({ guardian_id: data.id, device_id: l.device_id, intelbras_person_id: l.intelbras_person_id, synced: l.synced, school_id: schoolId }))
         );
       }
 
@@ -266,9 +270,9 @@ export default function Guardians() {
   };
 
   const handleLink = async () => {
-    if (linkChildren.length > 0) {
+    if (linkChildren.length > 0 && schoolId) {
       await supabase.from('guardian_children').insert(
-        linkChildren.map(childId => ({ guardian_id: linkGuardianId, child_id: childId }))
+        linkChildren.map(childId => ({ guardian_id: linkGuardianId, child_id: childId, school_id: schoolId }))
       );
       toast({ title: 'Crianças vinculadas!' });
     }
