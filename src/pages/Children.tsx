@@ -13,8 +13,10 @@ import { useToast } from '@/hooks/use-toast';
 import { PhotoUpload } from '@/components/PhotoUpload';
 import { ImportExcel } from '@/components/ImportExcel';
 import { ExportExcel } from '@/components/ExportExcel';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function Children() {
+  const { schoolId } = useAuth();
   const [children, setChildren] = useState<any[]>([]);
   const [classrooms, setClassrooms] = useState<any[]>([]);
   const [search, setSearch] = useState('');
@@ -62,10 +64,12 @@ export default function Children() {
         resetForm(); setOpen(false); fetchData();
       }
     } else {
+      if (!schoolId) { toast({ title: 'Selecione uma escola', variant: 'destructive' }); return; }
       const { error } = await supabase.from('children').insert({
         full_name: name,
         classroom_id: classroomId || null,
         photo_url: photoUrl || null,
+        school_id: schoolId,
       });
       if (error) {
         toast({ title: 'Erro', description: error.message, variant: 'destructive' });
@@ -115,7 +119,8 @@ export default function Children() {
                 const match = classrooms.find(c => c.name.toLowerCase() === row.classroom.toLowerCase());
                 if (match) classroom_id = match.id;
               }
-              const { error } = await supabase.from('children').insert({ full_name: row.full_name, classroom_id });
+              if (!schoolId) { errors++; continue; }
+              const { error } = await supabase.from('children').insert({ full_name: row.full_name, classroom_id, school_id: schoolId });
               if (error) errors++; else success++;
             }
             fetchData();
