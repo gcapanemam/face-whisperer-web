@@ -2,13 +2,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Baby, School, UserCheck, ClipboardList,
-  Settings, LogOut, Shield, Bell, MonitorSmartphone
+  Settings, LogOut, Shield, Bell, MonitorSmartphone, Building2
 } from 'lucide-react';
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
   SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const adminLinks = [
   { title: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
@@ -42,7 +43,7 @@ const receptionLinks = [
 ];
 
 export function AppSidebar() {
-  const { role, profile, signOut } = useAuth();
+  const { role, profile, signOut, isSuperAdmin, schools, schoolId, setActiveSchoolId } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -62,6 +63,7 @@ export function AppSidebar() {
     secretary: 'Secretaria',
     teacher: 'Professora',
     reception: 'Portaria',
+    super_admin: 'Super Admin',
   };
 
   return (
@@ -79,6 +81,28 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
+        {isSuperAdmin && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Super Admin</SidebarGroupLabel>
+            <SidebarGroupContent className="px-2 space-y-2">
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton isActive={location.pathname === '/schools'} onClick={() => navigate('/schools')}>
+                    <Building2 className="h-4 w-4" />
+                    <span>Escolas</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+              <Select value={schoolId || 'none'} onValueChange={(v) => setActiveSchoolId(v === 'none' ? null : v)}>
+                <SelectTrigger className="w-full text-xs"><SelectValue placeholder="Escola ativa" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhuma (gerenciar)</SelectItem>
+                  {schools.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
         <SidebarGroup>
           <SidebarGroupLabel>Menu</SidebarGroupLabel>
           <SidebarGroupContent>
