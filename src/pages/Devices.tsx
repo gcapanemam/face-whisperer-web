@@ -44,12 +44,13 @@ export default function Devices() {
   const [saving, setSaving] = useState(false);
 
   const fetchDevices = async () => {
-    const { data } = await supabase.from('devices').select('*').order('created_at');
+    if (!schoolId) { setDevices([]); setLoading(false); return; }
+    const { data } = await supabase.from('devices').select('*').eq('school_id', schoolId).order('created_at');
     setDevices(data || []);
     setLoading(false);
   };
 
-  useEffect(() => { fetchDevices(); }, []);
+  useEffect(() => { fetchDevices(); }, [schoolId]);
 
   const openNew = () => {
     setEditingId(null);
