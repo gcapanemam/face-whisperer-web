@@ -115,8 +115,9 @@ export default function Users() {
 
     setCreating(true);
     try {
+      if (!schoolId) { toast({ title: 'Selecione uma escola', variant: 'destructive' }); setCreating(false); return; }
       const { data, error } = await supabase.functions.invoke('create-user', {
-        body: { email, password, full_name: fullName, role, classroom_id: role === 'teacher' ? classroomId || null : null },
+        body: { email, password, full_name: fullName, role, classroom_id: role === 'teacher' ? classroomId || null : null, school_id: schoolId },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
