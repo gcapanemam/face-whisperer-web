@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Plus, Pencil, School as SchoolIcon, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 
 interface School {
   id: string;
@@ -24,6 +24,7 @@ interface School {
 
 export default function Schools() {
   const { isSuperAdmin, loading, reloadSchools, setActiveSchoolId } = useAuth();
+  const navigate = useNavigate();
   const [schools, setSchools] = useState<School[]>([]);
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -86,6 +87,7 @@ export default function Schools() {
   const handleEnter = (id: string) => {
     setActiveSchoolId(id);
     toast.success('Escola ativa selecionada');
+    navigate('/dashboard');
   };
 
   return (
