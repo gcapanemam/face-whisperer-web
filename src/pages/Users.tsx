@@ -36,12 +36,14 @@ export default function Users() {
   const { toast } = useToast();
 
   const fetchUsers = async () => {
-    const { data: roles } = await supabase.from('user_roles').select('user_id, role');
+    if (!schoolId) { setUsers([]); return; }
+    const { data: roles } = await supabase.from('user_roles').select('user_id, role').eq('school_id', schoolId);
     if (!roles) return;
     const userIds = roles.map(r => r.user_id);
+    if (userIds.length === 0) { setUsers([]); return; }
     const { data: profiles } = await supabase.from('profiles').select('*').in('user_id', userIds);
-    const { data: rooms } = await supabase.from('classrooms').select('id, name, teacher_user_id');
-    const { data: monitors } = await supabase.from('monitor_classrooms').select('user_id, classroom_id');
+    const { data: rooms } = await supabase.from('classrooms').select('id, name, teacher_user_id').eq('school_id', schoolId);
+    const { data: monitors } = await supabase.from('monitor_classrooms').select('user_id, classroom_id').eq('school_id', schoolId);
     const merged = roles.map(r => ({
       ...r,
       profile: profiles?.find(p => p.user_id === r.user_id),
@@ -52,11 +54,12 @@ export default function Users() {
   };
 
   const fetchClassrooms = async () => {
-    const { data } = await supabase.from('classrooms').select('id, name, teacher_user_id').order('name');
+    if (!schoolId) { setClassrooms([]); return; }
+    const { data } = await supabase.from('classrooms').select('id, name, teacher_user_id').eq('school_id', schoolId).order('name');
     setClassrooms(data || []);
   };
 
-  useEffect(() => { fetchUsers(); fetchClassrooms(); }, []);
+  useEffect(() => { fetchUsers(); fetchClassrooms(); }, [schoolId]);
 
   const resetForm = () => {
     setEmail(''); setPassword(''); setFullName(''); setRole('teacher'); setClassroomId(''); setMonitorClassroomIds([]); setEditUserId(null);
