@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Plus, Trash2, Loader2, Pencil } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 const roleLabels: Record<string, string> = {
   admin: 'Administrador',
@@ -20,6 +21,7 @@ const roleLabels: Record<string, string> = {
 };
 
 export default function Users() {
+  const { schoolId } = useAuth();
   const [users, setUsers] = useState<any[]>([]);
   const [classrooms, setClassrooms] = useState<any[]>([]);
   const [email, setEmail] = useState('');
@@ -73,9 +75,9 @@ export default function Users() {
 
   const syncMonitorClassrooms = async (userId: string, ids: string[]) => {
     await supabase.from('monitor_classrooms').delete().eq('user_id', userId);
-    if (ids.length > 0) {
+    if (ids.length > 0 && schoolId) {
       await supabase.from('monitor_classrooms').insert(
-        ids.map(classroom_id => ({ user_id: userId, classroom_id }))
+        ids.map(classroom_id => ({ user_id: userId, classroom_id, school_id: schoolId }))
       );
     }
   };

@@ -314,11 +314,13 @@ export default function Guardians() {
             let success = 0, errors = 0;
             for (const row of rows) {
               if (!row.full_name) { errors++; continue; }
+              if (!schoolId) { errors++; continue; }
               const { error } = await supabase.from('guardians').insert({
                 full_name: row.full_name,
                 phone: row.phone || null,
                 cpf: row.cpf || null,
                 email: row.email || null,
+                school_id: schoolId,
               });
               if (error) errors++; else success++;
             }
