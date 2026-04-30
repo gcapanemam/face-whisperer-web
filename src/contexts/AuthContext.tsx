@@ -1,37 +1,12 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
+import { AuthContext, useAuth, type School, type AuthContextType } from './auth-context';
+
+export { useAuth };
 
 type AppRole = Database['public']['Enums']['app_role'];
-
-interface School {
-  id: string;
-  name: string;
-  slug: string | null;
-}
-
-interface AuthContextType {
-  user: User | null;
-  session: Session | null;
-  role: AppRole | null;
-  profile: { full_name: string; email: string | null; avatar_url: string | null } | null;
-  loading: boolean;
-  isSuperAdmin: boolean;
-  /** School the user belongs to (null for super_admin) */
-  ownSchoolId: string | null;
-  /** Currently active school context. For super_admin, may be a selected school via switcher. */
-  schoolId: string | null;
-  /** All schools (for super_admin switcher) or just own school */
-  schools: School[];
-  /** Switch active school (super_admin only) */
-  setActiveSchoolId: (id: string | null) => void;
-  signIn: (email: string, password: string) => Promise<void>;
-  signOut: () => Promise<void>;
-  reloadSchools: () => Promise<void>;
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const ACTIVE_SCHOOL_KEY = 'active_school_id';
 
@@ -66,11 +41,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (profileResult.data) setProfile(profileResult.data);
 
-    // Load schools list
     const { data: schoolsData } = await supabase.from('schools').select('id, name, slug').order('name');
     setSchools(schoolsData || []);
 
-    // Determine active school
     const stored = localStorage.getItem(ACTIVE_SCHOOL_KEY);
     if (superAdmin) {
       setActiveSchoolIdState(stored && (schoolsData || []).some(s => s.id === stored) ? stored : null);
@@ -141,10 +114,4 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       {children}
     </AuthContext.Provider>
   );
-};
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within AuthProvider');
-  return context;
 };
