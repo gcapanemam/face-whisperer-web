@@ -61,11 +61,15 @@ export default function Guardians() {
   const { toast } = useToast();
 
   const fetchData = async () => {
+    if (!schoolId) {
+      setGuardians([]); setChildren([]); setDevices([]); setGuardianDevicesMap({});
+      return;
+    }
     const [{ data: g }, { data: c }, { data: d }, { data: gd }] = await Promise.all([
-      supabase.from('guardians').select('*').order('full_name'),
-      supabase.from('children').select('id, full_name, classrooms(name)').order('full_name'),
-      supabase.from('devices').select('id, name, enabled').eq('enabled', true).order('name'),
-      supabase.from('guardian_devices').select('*'),
+      supabase.from('guardians').select('*').eq('school_id', schoolId).order('full_name'),
+      supabase.from('children').select('id, full_name, classrooms(name)').eq('school_id', schoolId).order('full_name'),
+      supabase.from('devices').select('id, name, enabled').eq('school_id', schoolId).eq('enabled', true).order('name'),
+      supabase.from('guardian_devices').select('*').eq('school_id', schoolId),
     ]);
     setGuardians(g || []);
     setChildren(c || []);
@@ -80,7 +84,7 @@ export default function Guardians() {
     setGuardianDevicesMap(map);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [schoolId]);
 
   const resetForm = () => {
     setName(''); setPhone(''); setCpf(''); setEmail(''); setPhotoUrl(''); setSelectedChildren([]); setDeviceLinks([]); setEditId(null);
