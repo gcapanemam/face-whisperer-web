@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -29,6 +30,7 @@ function extractRawPath(raw: any): string | null {
 }
 
 export function ReceptionDashboard() {
+  const { schoolId, isSuperAdmin } = useAuth();
   const [events, setEvents] = useState<any[]>([]);
   const [rawByEventId, setRawByEventId] = useState<Record<string, { path: string; deviceId: string | null }>>({});
   const [unknownCount, setUnknownCount] = useState(0);
@@ -68,6 +70,7 @@ export function ReceptionDashboard() {
   const fetchEvents = useCallback(async () => {
     // Wait for allowed classrooms to load
     if (allowedClassroomIds === null) return;
+    if (!schoolId) { setEvents([]); setRawByEventId({}); return; }
     // If not admin and no classrooms assigned, show nothing
     if (!isAdmin && allowedClassroomIds.length === 0) {
       setEvents([]);
@@ -76,6 +79,7 @@ export function ReceptionDashboard() {
     let query = supabase
       .from('pickup_events')
       .select('*, guardians(full_name, photo_url), children(full_name, photo_url), classrooms(name)')
+      .eq('school_id', schoolId)
       .gte('created_at', new Date().toISOString().split('T')[0])
       .order('created_at', { ascending: false })
       .limit(50);
@@ -95,6 +99,7 @@ export function ReceptionDashboard() {
       const { data: logs } = await supabase
         .from('recognition_log')
         .select('intelbras_event_id, device_id, raw_data')
+        .eq('school_id', schoolId)
         .in('intelbras_event_id', eventIds)
         .gte('created_at', new Date().toISOString().split('T')[0]);
       const map: Record<string, { path: string; deviceId: string | null }> = {};
@@ -108,10 +113,11 @@ export function ReceptionDashboard() {
     } else {
       setRawByEventId({});
     }
-  }, [allowedClassroomIds, isAdmin, selectedDeviceId]);
+  }, [allowedClassroomIds, isAdmin, selectedDeviceId, schoolId]);
 
   const fetchUnknown = useCallback(async () => {
     if (allowedClassroomIds === null) return;
+    if (!schoolId) { setUnknownCount(0); return; }
     if (!isAdmin && allowedClassroomIds.length === 0) {
       setUnknownCount(0);
       return;
@@ -119,6 +125,7 @@ export function ReceptionDashboard() {
     let query = supabase
       .from('recognition_log')
       .select('id', { count: 'exact', head: true })
+      .eq('school_id', schoolId)
       .eq('recognized', false)
       .gte('created_at', new Date().toISOString().split('T')[0]);
     if (selectedDeviceId !== 'all') {
@@ -126,12 +133,13 @@ export function ReceptionDashboard() {
     }
     const { count } = await query;
     setUnknownCount(count || 0);
-  }, [allowedClassroomIds, isAdmin, selectedDeviceId]);
+  }, [allowedClassroomIds, isAdmin, selectedDeviceId, schoolId]);
 
-  const fetchDevices = async () => {
-    const { data } = await supabase.from('devices').select('id, name, enabled').eq('enabled', true).order('name');
+  const fetchDevices = useCallback(async () => {
+    if (!schoolId) { setDevices([]); return; }
+    const { data } = await supabase.from('devices').select('id, name, enabled').eq('school_id', schoolId).eq('enabled', true).order('name');
     setDevices(data || []);
-  };
+  }, [schoolId]);
 
   const pollDevice = useCallback(async () => {
     setIsPolling(true);
@@ -155,7 +163,7 @@ export function ReceptionDashboard() {
   useEffect(() => {
     fetchAllowedClassrooms();
     fetchDevices();
-  }, []);
+  }, [schoolId, fetchDevices]);
 
   useEffect(() => {
     fetchEvents();

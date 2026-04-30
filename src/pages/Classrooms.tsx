@@ -26,7 +26,8 @@ export default function Classrooms() {
   const { toast } = useToast();
 
   const fetchData = async () => {
-    const { data } = await supabase.from('classrooms').select('*').order('name');
+    if (!schoolId) { setClassrooms([]); setTeachers([]); return; }
+    const { data } = await supabase.from('classrooms').select('*').eq('school_id', schoolId).order('name');
     const teacherIds = (data || []).map(c => c.teacher_user_id).filter(Boolean);
     if (teacherIds.length > 0) {
       const { data: profs } = await supabase.from('profiles').select('user_id, full_name, avatar_url').in('user_id', teacherIds);
@@ -39,7 +40,7 @@ export default function Classrooms() {
       }
     }
     setClassrooms(data || []);
-    const { data: roles } = await supabase.from('user_roles').select('user_id').eq('role', 'teacher');
+    const { data: roles } = await supabase.from('user_roles').select('user_id').eq('role', 'teacher').eq('school_id', schoolId);
     if (roles) {
       const ids = roles.map(r => r.user_id);
       const { data: profs } = await supabase.from('profiles').select('user_id, full_name, avatar_url').in('user_id', ids);
@@ -47,7 +48,7 @@ export default function Classrooms() {
     }
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [schoolId]);
 
   const resetForm = () => {
     setName(''); setGrade(''); setTeacherId(''); setEditId(null);

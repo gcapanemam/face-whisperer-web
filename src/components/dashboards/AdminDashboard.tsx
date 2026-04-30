@@ -3,19 +3,27 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Baby, Users, School, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 
 export function AdminDashboard() {
+  const { schoolId } = useAuth();
   const [stats, setStats] = useState({ children: 0, guardians: 0, classrooms: 0, todayEvents: 0 });
   const [recentEvents, setRecentEvents] = useState<any[]>([]);
   const navigate = useNavigate();
 
   useEffect(() => {
+    if (!schoolId) {
+      setStats({ children: 0, guardians: 0, classrooms: 0, todayEvents: 0 });
+      setRecentEvents([]);
+      return;
+    }
     const fetchStats = async () => {
       const [c, g, cl, ev] = await Promise.all([
-        supabase.from('children').select('id', { count: 'exact', head: true }),
-        supabase.from('guardians').select('id', { count: 'exact', head: true }),
-        supabase.from('classrooms').select('id', { count: 'exact', head: true }),
+        supabase.from('children').select('id', { count: 'exact', head: true }).eq('school_id', schoolId),
+        supabase.from('guardians').select('id', { count: 'exact', head: true }).eq('school_id', schoolId),
+        supabase.from('classrooms').select('id', { count: 'exact', head: true }).eq('school_id', schoolId),
         supabase.from('pickup_events').select('id', { count: 'exact', head: true })
+          .eq('school_id', schoolId)
           .gte('created_at', new Date().toISOString().split('T')[0]),
       ]);
       setStats({
@@ -30,6 +38,7 @@ export function AdminDashboard() {
       const { data } = await supabase
         .from('pickup_events')
         .select('*, guardians(full_name), children(full_name), classrooms(name)')
+        .eq('school_id', schoolId)
         .order('created_at', { ascending: false })
         .limit(5);
       setRecentEvents(data || []);
@@ -37,7 +46,7 @@ export function AdminDashboard() {
 
     fetchStats();
     fetchRecent();
-  }, []);
+  }, [schoolId]);
 
   const statCards = [
     { label: 'Crianças', value: stats.children, icon: Baby, color: 'text-primary', path: '/children' },

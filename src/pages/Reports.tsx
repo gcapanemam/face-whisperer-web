@@ -8,8 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Download, Search } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function Reports() {
+  const { schoolId } = useAuth();
   const [events, setEvents] = useState<any[]>([]);
   const [classrooms, setClassrooms] = useState<any[]>([]);
   const [children, setChildren] = useState<any[]>([]);
@@ -24,25 +26,28 @@ export default function Reports() {
 
   useEffect(() => {
     const fetchOptions = async () => {
+      if (!schoolId) { setClassrooms([]); setChildren([]); setGuardians([]); return; }
       const [rooms, kids, guards] = await Promise.all([
-        supabase.from('classrooms').select('id, name').order('name'),
-        supabase.from('children').select('id, full_name').order('full_name'),
-        supabase.from('guardians').select('id, full_name').order('full_name'),
+        supabase.from('classrooms').select('id, name').eq('school_id', schoolId).order('name'),
+        supabase.from('children').select('id, full_name').eq('school_id', schoolId).order('full_name'),
+        supabase.from('guardians').select('id, full_name').eq('school_id', schoolId).order('full_name'),
       ]);
       setClassrooms(rooms.data || []);
       setChildren(kids.data || []);
       setGuardians(guards.data || []);
     };
     fetchOptions();
-  }, []);
+  }, [schoolId]);
 
   const fetchData = async () => {
+    if (!schoolId) { setEvents([]); return; }
     setLoading(true);
     const nextDay = new Date(new Date(dateTo).getTime() + 86400000).toISOString().split('T')[0];
 
     let query = supabase
       .from('pickup_events')
       .select('*, guardians(full_name), children(full_name), classrooms(name)')
+      .eq('school_id', schoolId)
       .gte('created_at', dateFrom)
       .lt('created_at', nextDay)
       .order('created_at', { ascending: false });
@@ -57,7 +62,7 @@ export default function Reports() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [schoolId]);
 
   const statusLabels: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' }> = {
     pending: { label: 'Pendente', variant: 'secondary' },

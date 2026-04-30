@@ -28,15 +28,16 @@ export default function Children() {
   const { toast } = useToast();
 
   const fetchData = async () => {
+    if (!schoolId) { setChildren([]); setClassrooms([]); return; }
     const [{ data: kids }, { data: rooms }] = await Promise.all([
-      supabase.from('children').select('*, classrooms(name)').order('full_name'),
-      supabase.from('classrooms').select('id, name').order('name'),
+      supabase.from('children').select('*, classrooms(name)').eq('school_id', schoolId).order('full_name'),
+      supabase.from('classrooms').select('id, name').eq('school_id', schoolId).order('name'),
     ]);
     setChildren(kids || []);
     setClassrooms(rooms || []);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [schoolId]);
 
   const resetForm = () => {
     setName(''); setClassroomId(''); setPhotoUrl(''); setEditId(null);
