@@ -15,6 +15,7 @@ import Reports from "./pages/Reports";
 import Monitoring from "./pages/Monitoring";
 import Notifications from "./pages/Notifications";
 import Devices from "./pages/Devices";
+import Schools from "./pages/Schools";
 import Index from "@/pages/Index";
 import NotFound from "./pages/NotFound";
 
@@ -53,6 +54,7 @@ const App = () => (
             <Route path="/monitoring" element={<ProtectedRoute><Monitoring /></ProtectedRoute>} />
             <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
             <Route path="/devices" element={<ProtectedRoute><Devices /></ProtectedRoute>} />
+            <Route path="/schools" element={<ProtectedRoute><Schools /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

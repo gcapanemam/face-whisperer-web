@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Plus, Pencil, Trash2, Eye, EyeOff, Wifi, WifiOff, Loader2, MonitorSmartphone } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface Device {
   id: string;
@@ -32,6 +33,7 @@ interface DeviceForm {
 const emptyForm: DeviceForm = { name: '', device_url: '', username: '', password: '', enabled: true };
 
 export default function Devices() {
+  const { schoolId } = useAuth();
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -88,12 +90,14 @@ export default function Devices() {
         if (error) throw error;
         toast.success('Dispositivo atualizado');
       } else {
+        if (!schoolId) { toast.error('Selecione uma escola primeiro'); return; }
         const { error } = await supabase.from('devices').insert({
           name: form.name.trim(),
           device_url: cleanUrl,
           username: form.username.trim(),
           password: form.password,
           enabled: form.enabled,
+          school_id: schoolId,
         });
         if (error) throw error;
         toast.success('Dispositivo adicionado');

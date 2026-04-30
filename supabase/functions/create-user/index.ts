@@ -38,24 +38,49 @@ serve(async (req) => {
       });
     }
 
-    // Check admin role
+    // Check admin or super_admin role
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
-    const { data: isAdmin } = await adminClient.rpc("has_role", {
-      _user_id: caller.id,
-      _role: "admin",
-    });
+    const { data: callerRolesCheck } = await adminClient
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", caller.id);
+    const allowed = (callerRolesCheck || []).some((r: any) => r.role === "admin" || r.role === "super_admin");
 
-    if (!isAdmin) {
+    if (!allowed) {
       return new Response(JSON.stringify({ error: "Apenas administradores podem criar usuários" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const { email, password, full_name, role, classroom_id } = await req.json();
+    const { email, password, full_name, role, classroom_id, school_id } = await req.json();
 
     if (!email || !password || !full_name || !role) {
       return new Response(JSON.stringify({ error: "Campos obrigatórios: email, password, full_name, role" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Determine target school: super_admin can specify any; admin uses own school
+    const { data: callerRoles } = await adminClient
+      .from("user_roles")
+      .select("role, school_id")
+      .eq("user_id", caller.id);
+    const isSuperAdmin = (callerRoles || []).some((r: any) => r.role === "super_admin");
+    const callerSchoolId = (callerRoles || []).find((r: any) => r.role !== "super_admin")?.school_id || null;
+
+    let targetSchoolId: string | null = null;
+    if (role === "super_admin") {
+      targetSchoolId = null; // super admin não pertence a uma escola
+    } else if (isSuperAdmin) {
+      targetSchoolId = school_id || callerSchoolId;
+    } else {
+      targetSchoolId = callerSchoolId;
+    }
+
+    if (role !== "super_admin" && !targetSchoolId) {
+      return new Response(JSON.stringify({ error: "Escola não definida para o novo usuário" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -76,10 +101,16 @@ serve(async (req) => {
       });
     }
 
-    // Assign role
+    // Update profile school_id
+    if (targetSchoolId) {
+      await adminClient.from("profiles").update({ school_id: targetSchoolId }).eq("user_id", newUser.user.id);
+    }
+
+    // Assign role with school
     const { error: roleError } = await adminClient.from("user_roles").insert({
       user_id: newUser.user.id,
       role,
+      school_id: targetSchoolId,
     });
 
     if (roleError) {
@@ -89,12 +120,13 @@ serve(async (req) => {
       });
     }
 
-    // If teacher and classroom_id provided, link to classroom
+    // If teacher and classroom_id provided, link to classroom (within same school)
     if (role === "teacher" && classroom_id) {
       await adminClient
         .from("classrooms")
         .update({ teacher_user_id: newUser.user.id })
-        .eq("id", classroom_id);
+        .eq("id", classroom_id)
+        .eq("school_id", targetSchoolId);
     }
 
     return new Response(
